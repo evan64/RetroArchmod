@@ -1,0 +1,50 @@
+
+name: Build RetroArch RGUI v4 Windows x64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout modified RetroArch
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install MSYS2 compiler
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            git
+            make
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-SDL2
+            mingw-w64-x86_64-libxml2
+            mingw-w64-x86_64-freetype
+            mingw-w64-x86_64-ffmpeg
+
+      - name: Configure RetroArch
+        run: ./configure
+
+      - name: Compile RetroArch
+        run: make -j4
+
+      - name: Upload compiled executable
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroArch-RGUI-v4-Windows-x64
+          path: retroarch.exe
+          if-no-files-found: error
