@@ -5569,14 +5569,35 @@ static void rgui_render(
             gfx_animation_ticker(&ticker);
          }
 
-         /* Print entry title */
-         rgui_blit_line(rgui,
-               fb_width,
-               ticker_x_offset + x + (2 * rgui->font_width_stride),
-               y,
-               entry_title_buf,
-               entry_color,
-               rgui->colors.shadow_color);
+         /* CRT Library v4: center system names on the Playlists index only.
+          * Do not change game lists or settings menus. */
+         {
+            bool center_playlist_entry =
+                  string_is_equal(rgui->menu_title, "PLAYLISTS") &&
+                  (entry_value_type == RGUI_ENTRY_VALUE_NONE);
+            unsigned entry_x = ticker_x_offset + x +
+                  (2 * rgui->font_width_stride);
+
+            if (center_playlist_entry)
+            {
+               size_t text_len = utf8len(entry_title_buf);
+               unsigned text_width = (unsigned)text_len * rgui->font_width_stride;
+               unsigned region_width = rgui->term_layout.width * rgui->font_width_stride;
+
+               if (text_width < region_width - (4 * rgui->font_width_stride))
+                  entry_x = rgui->term_layout.start_x +
+                        (region_width - text_width) / 2;
+            }
+
+            rgui_blit_line(rgui, fb_width, entry_x, y,
+                  entry_title_buf, entry_color, rgui->colors.shadow_color);
+
+            /* Selection marker follows the centered title. */
+            if (entry_selected && center_playlist_entry)
+               rgui_blit_line(rgui, fb_width,
+                     entry_x - rgui->font_width_stride, y, ">",
+                     entry_color, rgui->colors.shadow_color);
+         }
 
          /* Print entry value, if required */
          switch (entry_value_type)
@@ -5658,7 +5679,7 @@ static void rgui_render(
          }
 
          /* Print selection marker, if required */
-         if (entry_selected)
+         if (entry_selected && !string_is_equal(rgui->menu_title, "PLAYLISTS"))
             rgui_blit_line(rgui, fb_width, x, y, ">",
                   entry_color, rgui->colors.shadow_color);
       }
