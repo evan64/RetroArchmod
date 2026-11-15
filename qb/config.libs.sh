@@ -952,6 +952,7 @@ if [ "$HAVE_MENU" != 'no' ]; then
          if [ "$HAVE_CACA" != 'yes' ] && [ "$HAVE_SIXEL" != 'yes' ] &&
             [ "$HAVE_SDL" != 'yes' ] && [ "$HAVE_SDL2" != 'yes' ]; then
             add_opt RGUI no
+            add_opt PIX16 no
          fi
          add_opt MATERIALUI no
          add_opt OZONE no

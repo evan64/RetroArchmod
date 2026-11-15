@@ -460,6 +460,14 @@ enum rgui_aspect_ratio_lock
    RGUI_ASPECT_RATIO_LOCK_LAST
 };
 
+enum pix16_button_style
+{
+   PIX16_BUTTONS_PLAYSTATION = 0,
+   PIX16_BUTTONS_NINTENDO,
+   PIX16_BUTTONS_XBOX,
+   PIX16_BUTTONS_LAST
+};
+
 enum rgui_particle_animation_effect
 {
    RGUI_PARTICLE_EFFECT_NONE = 0,
