@@ -5828,6 +5828,41 @@ static size_t setting_get_string_representation_uint_pix16_transition(
                   msg_hash_to_str(
                      MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_ZOOM),
                   len);
+         case PIX16_TRANSITION_IRIS:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_IRIS),
+                  len);
+         case PIX16_TRANSITION_WIPE:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_WIPE),
+                  len);
+         case PIX16_TRANSITION_DISSOLVE:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_DISSOLVE),
+                  len);
+         case PIX16_TRANSITION_SPLIT:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_SPLIT),
+                  len);
+         case PIX16_TRANSITION_BLAST:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_BLAST),
+                  len);
+         case PIX16_TRANSITION_ROLL:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_ROLL),
+                  len);
+         case PIX16_TRANSITION_STATIC:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_STATIC),
+                  len);
          case PIX16_TRANSITION_RANDOM:
             return strlcpy(s,
                   msg_hash_to_str(

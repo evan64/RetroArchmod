@@ -7380,6 +7380,225 @@ static void pix16_launch_zoom(pix16_t *pix, float t)
    }
 }
 
+/* Late in an effect that ends dark: wash to white, so the handover's
+ * flash does not cut in */
+static void pix16_launch_flashout(pix16_t *pix, float t)
+{
+   size_t i, n = (size_t)PIX16_FB_WIDTH * (size_t)PIX16_FB_HEIGHT;
+   unsigned f;
+   if (t <= 0.85f)
+      return;
+   f = (unsigned)((t - 0.85f) / 0.15f * 255.0f);
+   if (f > 255)
+      f = 255;
+   for (i = 0; i < n; i++)
+      pix->fb[i] = pix16_toward_white(pix->fb[i], f, pix->fmt_565);
+}
+
+/* The picture closes down to a point behind a bright iris */
+static void pix16_launch_iris(pix16_t *pix, float t)
+{
+   int w  = PIX16_FB_WIDTH;
+   int h  = PIX16_FB_HEIGHT;
+   int cx = w / 2;
+   int cy = h / 2;
+   float rmax = (float)((w < h) ? w : h) * 0.62f;
+   float r    = rmax * (1.0f - t);
+   uint16_t rim   = pix->conv(0xFFFFFFFF);
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   int x, y;
+
+   memcpy(pix->upload, pix->fb, (size_t)w * (size_t)h * sizeof(uint16_t));
+   for (y = 0; y < h; y++)
+   {
+      float dy = (float)(y - cy);
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         float dx = (float)(x - cx);
+         float d  = sqrtf(dx * dx + dy * dy);
+         if (d <= r)
+            row[x] = pix->upload[(size_t)y * (size_t)w + x];
+         else if (d <= r + 2.0f)
+            row[x] = rim;
+         else
+            row[x] = empty;
+      }
+   }
+   pix16_launch_flashout(pix, t);
+}
+
+/* A wipe line sweeps down the screen, black behind it */
+static void pix16_launch_wipe(pix16_t *pix, float t)
+{
+   int w = PIX16_FB_WIDTH;
+   int h = PIX16_FB_HEIGHT;
+   float line = t * (float)(h + 10);
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   int x, y;
+
+   memcpy(pix->upload, pix->fb, (size_t)w * (size_t)h * sizeof(uint16_t));
+   for (y = 0; y < h; y++)
+   {
+      float d = line - (float)y;
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         uint16_t c = pix->upload[(size_t)y * (size_t)w + x];
+         if (d > 8.0f)
+            c = empty;
+         else if (d > 0.0f)
+            c = pix16_toward_white(c, (unsigned)(d / 8.0f * 255.0f),
+                  pix->fmt_565);
+         row[x] = c;
+      }
+   }
+   pix16_launch_flashout(pix, t);
+}
+
+/* The picture crumbles away pixel by pixel */
+static void pix16_launch_dissolve(pix16_t *pix, float t)
+{
+   int w = PIX16_FB_WIDTH;
+   int h = PIX16_FB_HEIGHT;
+   unsigned cut   = (unsigned)(t * 300.0f);
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   int x, y;
+
+   for (y = 0; y < h; y++)
+   {
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         unsigned n = pix16_hash((uint32_t)(y * w + x) * 2654435761u);
+         if ((n & 0xFF) < cut)
+            row[x] = empty;
+      }
+   }
+   pix16_launch_flashout(pix, t);
+}
+
+/* The screen splits down the middle and the halves slide apart */
+static void pix16_launch_split(pix16_t *pix, float t)
+{
+   int w   = PIX16_FB_WIDTH;
+   int h   = PIX16_FB_HEIGHT;
+   int off = (int)(t * t * (float)w * 0.7f);
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   uint16_t rim   = pix->conv(0xFFFFFFFF);
+   int x, y;
+
+   memcpy(pix->upload, pix->fb, (size_t)w * (size_t)h * sizeof(uint16_t));
+   for (y = 0; y < h; y++)
+   {
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         if (x < w / 2)
+         {
+            int src = x + off;
+            row[x]  = (src < w / 2)
+                  ? pix->upload[(size_t)y * (size_t)w + src] : empty;
+         }
+         else
+         {
+            int src = x - off;
+            row[x]  = (src >= w / 2)
+                  ? pix->upload[(size_t)y * (size_t)w + src] : empty;
+         }
+      }
+   }
+   /* the parting edges */
+   if (w / 2 - off - 1 >= 0)
+      pix16_fill(pix, w / 2 - off - 1, 0, 1, h, rim);
+   if (w / 2 + off < w)
+      pix16_fill(pix, w / 2 + off, 0, 1, h, rim);
+   pix16_launch_flashout(pix, t);
+}
+
+/* A white blast grows from the middle and swallows the screen */
+static void pix16_launch_blast(pix16_t *pix, float t)
+{
+   int w  = PIX16_FB_WIDTH;
+   int h  = PIX16_FB_HEIGHT;
+   int cx = w / 2;
+   int cy = h / 2;
+   float rmax = (float)((w < h) ? w : h) * 0.75f;
+   float r    = t * rmax * 1.5f;
+   uint16_t white = pix->conv(0xFFFFFFFF);
+   uint16_t glow  = pix->conv(0xFFE8F0FF);
+   int x, y;
+
+   memcpy(pix->upload, pix->fb, (size_t)w * (size_t)h * sizeof(uint16_t));
+   for (y = 0; y < h; y++)
+   {
+      float dy = (float)(y - cy);
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         float dx = (float)(x - cx);
+         float d  = sqrtf(dx * dx + dy * dy);
+         if (d <= r)
+            row[x] = white;
+         else if (d <= r + 6.0f)
+            row[x] = glow;
+         else
+            row[x] = pix->upload[(size_t)y * (size_t)w + x];
+      }
+   }
+}
+
+/* The picture rolls up, a blanking bar sweeping through it */
+static void pix16_launch_roll(pix16_t *pix, float t)
+{
+   int w = PIX16_FB_WIDTH;
+   int h = PIX16_FB_HEIGHT;
+   int shift = (int)(t * t * (float)h * 2.4f);
+   int band  = h / 5;
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   int x, y;
+
+   memcpy(pix->upload, pix->fb, (size_t)w * (size_t)h * sizeof(uint16_t));
+   for (y = 0; y < h; y++)
+   {
+      int sy = (y + shift) % h;
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      if (sy < band)
+      {
+         for (x = 0; x < w; x++)
+            row[x] = empty;
+      }
+      else
+         memcpy(row, pix->upload + (size_t)sy * (size_t)w,
+               sizeof(uint16_t) * (size_t)w);
+   }
+   pix16_launch_flashout(pix, t);
+}
+
+/* The picture breaks up into noise and cuts out */
+static void pix16_launch_static(pix16_t *pix, float t)
+{
+   int w = PIX16_FB_WIDTH;
+   int h = PIX16_FB_HEIGHT;
+   unsigned seed  = (unsigned)(t * 60.0f) * 2654435761u;
+   unsigned cut   = (unsigned)(t * t * 320.0f);
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   uint16_t white = pix->conv(0xFFFFFFFF);
+   int x, y;
+
+   for (y = 0; y < h; y++)
+   {
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         unsigned n = pix16_hash((uint32_t)(y * w + x) ^ seed);
+         if ((n & 0xFF) < cut)
+            row[x] = ((n >> 9) & 7) ? empty : white;
+      }
+   }
+   pix16_launch_flashout(pix, t);
+}
+
 static void pix16_launch_effect(pix16_t *pix, float t)
 {
    switch (pix->launch_kind)
@@ -7392,6 +7611,27 @@ static void pix16_launch_effect(pix16_t *pix, float t)
          break;
       case PIX16_TRANSITION_ZOOM:
          pix16_launch_zoom(pix, t);
+         break;
+      case PIX16_TRANSITION_IRIS:
+         pix16_launch_iris(pix, t);
+         break;
+      case PIX16_TRANSITION_WIPE:
+         pix16_launch_wipe(pix, t);
+         break;
+      case PIX16_TRANSITION_DISSOLVE:
+         pix16_launch_dissolve(pix, t);
+         break;
+      case PIX16_TRANSITION_SPLIT:
+         pix16_launch_split(pix, t);
+         break;
+      case PIX16_TRANSITION_BLAST:
+         pix16_launch_blast(pix, t);
+         break;
+      case PIX16_TRANSITION_ROLL:
+         pix16_launch_roll(pix, t);
+         break;
+      case PIX16_TRANSITION_STATIC:
+         pix16_launch_static(pix, t);
          break;
       default:
          pix16_battle_swirl(pix, t);
