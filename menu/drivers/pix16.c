@@ -5296,78 +5296,52 @@ static void pix16_draw_bios_panel(pix16_t *pix, int ms, int x, int y, int w,
    }
 }
 
-/* BIOS mascot: a pixel alien drawn as outlined blocks; its fringe
- * sways and it blinks. */
-#define PIX16_ALIEN_W 13
-#define PIX16_ALIEN_H 12
-static const char *pix16_alien[2][PIX16_ALIEN_H] = {
-   {
-      "......o......",
-      "......#......",
-      "....#####....",
-      "..#########..",
-      ".###########.",
-      ".##..###..##.",
-      ".##.e###.e##.",
-      "#############",
-      "#############",
-      "#.#.#.#.#.#.#",
-      "#.#.#.#.#.#.#",
-      ".#...#.#...#."
-   },
-   {
-      "......o......",
-      "......#......",
-      "....#####....",
-      "..#########..",
-      ".###########.",
-      ".##..###..##.",
-      ".##.e###.e##.",
-      "#############",
-      "#############",
-      ".#.#.#.#.#.#.",
-      ".#.#.#.#.#.#.",
-      "#...#...#...#"
-   }
+/* BIOS mascot: the RetroArch alien, a flat silhouette with antennae, a
+ * brow, square eyes, side pincers and four legs. It blinks and its
+ * antenna tips pulse. */
+#define PIX16_ALIEN_W 23
+#define PIX16_ALIEN_H 13
+static const char *pix16_alien[PIX16_ALIEN_H] = {
+   ".......#.......#.......",
+   ".......##.....##.......",
+   "##....###########....##",
+   ".#...#############...#.",
+   ".#..###ee#####ee###..#.",
+   "#######ee#####ee#######",
+   "#######################",
+   "#######################",
+   "...#################...",
+   "....###############....",
+   "....##..##...##..##....",
+   "...##...##....##...##..",
+   "..##...##......##...##."
 };
 
 static void pix16_draw_alien(pix16_t *pix, int x, int y, int bs, int ms)
 {
-   uint16_t edge  = pix->colors[PIX16_C_J_GOLD];
-   uint16_t fill  = pix->colors[PIX16_C_J_BORDER_LO];
-   uint16_t core  = pix->colors[PIX16_C_J_VALUE];
-   uint16_t hot   = pix->colors[PIX16_C_J_TEXT];
-   int frame      = (ms / 420) & 1;
-   bool blink     = (ms % 3400) < 140;
-   bool glint     = ((ms / 300) & 1) != 0;
+   uint16_t body = pix->colors[PIX16_C_J_BORDER_LO];
+   uint16_t brow = pix->colors[PIX16_C_J_BORDER];
+   uint16_t tip  = ((ms / 300) & 1) ? pix->colors[PIX16_C_J_TEXT]
+                                    : pix->colors[PIX16_C_J_GOLD];
+   uint16_t hole = pix->colors[PIX16_C_J_BG];
+   bool blink    = (ms % 3400) < 140;
    int r, c;
    for (r = 0; r < PIX16_ALIEN_H; r++)
       for (c = 0; c < PIX16_ALIEN_W; c++)
       {
-         char ch = pix16_alien[frame][r][c];
-         int bx  = x + c * bs, by = y + r * bs;
-         if (ch == '#')
-         {
-            /* outlined block: bright edge, dark inside, a lit centre */
-            pix16_fill(pix, bx, by, bs, bs, edge);
-            if (bs >= 4)
-            {
-               pix16_fill(pix, bx + 1, by + 1, bs - 2, bs - 2, fill);
-               if (bs >= 6)
-                  pix16_fill(pix, bx + bs / 2 - 1, by + bs / 2 - 1, 2, 2, core);
-            }
-         }
-         else if (ch == 'e')
-         {
-            /* pupils, in the holes of the eyes; shut when it blinks */
-            if (!blink)
-               pix16_fill(pix, bx + bs / 4, by - bs / 2, bs / 2 + 1, bs / 2 + 1, hot);
-         }
-         else if (ch == 'o')
-         {
-            /* antenna light, pulsing */
-            pix16_fill(pix, bx, by, bs, bs, glint ? hot : edge);
-         }
+         char ch = pix16_alien[r][c];
+         uint16_t col;
+         if (ch == '.')
+            continue;
+         if (ch == 'e')
+            col = blink ? body : hole;
+         else if (r == 0)
+            col = tip;              /* antenna tips */
+         else if (r == 2)
+            col = brow;             /* bevel along the brow */
+         else
+            col = body;
+         pix16_fill(pix, x + c * bs, y + r * bs, bs, bs, col);
       }
 }
 
@@ -5440,14 +5414,14 @@ static void pix16_draw_bios(pix16_t *pix, int ms)
       y += lh;
    }
 
-   /* the mascot: under the text (widescreen) or in the top right
-    * corner (4:3), drawn in by a scanning beam, then it idles */
+   /* the mascot: along the bottom, under the text, drawn in by a
+    * scanning beam, then it idles */
    {
-      int bs  = wide ? 8 : 5;                 /* block size */
+      int bs  = wide ? 8 : 3;                 /* block size */
       int lw  = PIX16_ALIEN_W * bs, lhh = PIX16_ALIEN_H * bs;
       int lx  = wide ? 20 + (28 * PIX16_GLYPH_W - lw) / 2
                      : PIX16_FB_WIDTH - 12 - lw;
-      int ly  = wide ? PIX16_FB_HEIGHT - 12 - lhh : 12;
+      int ly  = PIX16_FB_HEIGHT - 12 - lhh;
       int rev = ms < 900 ? lhh * ms / 900 : lhh;   /* rows revealed */
       int cy1 = pix->clip_y1;
       if (rev > 0)
@@ -7137,6 +7111,7 @@ static void pix16_draw_handover(pix16_t *pix)
    retro_time_t ms = (menu_driver_get_current_time() - pix->handover_t0) / 1000;
    unsigned f = 255;
 
+   /* reduced motion: no flash, just hold black */
    if (ms > 120)
    {
       int t = (int)(ms - 120);
