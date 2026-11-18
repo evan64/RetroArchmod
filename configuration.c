@@ -2577,6 +2577,11 @@ static const struct config_bool_row config_bool_rows[] = {
 #include "settings/settings_def_rgui_aspect.h"
 #endif
 #endif
+#ifdef HAVE_MENU
+#ifdef HAVE_PIX16
+#include "settings/settings_def_pix16.h"
+#endif
+#endif
 #include "settings/settings_def_record_threads.h"
 #include "settings/settings_def_stream_quality.h"
 #include "settings/settings_def_record_quality.h"
@@ -3417,6 +3422,11 @@ static const struct config_float_row config_float_rows[] = {
 #include "settings/settings_def_rgui_aspect.h"
 #endif
 #endif
+#ifdef HAVE_MENU
+#ifdef HAVE_PIX16
+#include "settings/settings_def_pix16.h"
+#endif
+#endif
 #include "settings/settings_def_record_threads.h"
 #include "settings/settings_def_stream_quality.h"
 #include "settings/settings_def_record_quality.h"
@@ -4060,6 +4070,11 @@ static const struct config_uint_row config_uint_rows[] = {
 #ifdef HAVE_MENU
 #ifdef HAVE_RGUI
 #include "settings/settings_def_rgui_aspect.h"
+#endif
+#endif
+#ifdef HAVE_MENU
+#ifdef HAVE_PIX16
+#include "settings/settings_def_pix16.h"
 #endif
 #endif
 #include "settings/settings_def_record_threads.h"
@@ -4862,6 +4877,11 @@ static const struct config_int_row config_int_rows[] = {
 #include "settings/settings_def_rgui_aspect.h"
 #endif
 #endif
+#ifdef HAVE_MENU
+#ifdef HAVE_PIX16
+#include "settings/settings_def_pix16.h"
+#endif
+#endif
 #include "settings/settings_def_record_threads.h"
 #include "settings/settings_def_stream_quality.h"
 #include "settings/settings_def_record_quality.h"
@@ -5504,6 +5524,11 @@ static struct config_int_setting *populate_settings_int(
 #ifdef HAVE_MENU
 #ifdef HAVE_RGUI
 #include "settings/settings_def_rgui_aspect.h"
+#endif
+#endif
+#ifdef HAVE_MENU
+#ifdef HAVE_PIX16
+#include "settings/settings_def_pix16.h"
 #endif
 #endif
 #include "settings/settings_def_record_threads.h"
@@ -6787,6 +6812,7 @@ static bool check_menu_driver_compatibility(settings_t *settings)
    char *menu_driver    = settings->arrays.menu_driver;
 
    if (  (memcmp(menu_driver,  "rgui", 4) == 0 && menu_driver[4]  == '\0')
+      || (memcmp(menu_driver,  "pix16", 5) == 0 && menu_driver[5] == '\0')
       || (memcmp(menu_driver,  "null", 4) == 0 && menu_driver[4]  == '\0')
       || (memcmp(video_driver, "null", 4) == 0 && video_driver[4] == '\0'))
       return true;
