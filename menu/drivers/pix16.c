@@ -737,6 +737,12 @@ static unsigned pix16_lum(uint32_t c)
    return ((c >> 16) & 0xFF) * 30 + ((c >> 8) & 0xFF) * 59 + (c & 0xFF) * 11;
 }
 
+/* A pale selection bar needs dark text: the normal light text vanishes on it */
+static bool pix16_sel_light(const pix16_t *pix)
+{
+   return pix16_lum(pix->sel_top) > 15000;
+}
+
 static uint32_t pix16_lighten(uint32_t c, unsigned f)
 {
    unsigned r = (c >> 16) & 0xFF;
@@ -3968,6 +3974,8 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
    int glove_x = 0, glove_y = 0;
    bool has_glove             = false;
    bool show_glove;
+   bool sel_light;
+   uint16_t sel_text, sel_value;
    bool hearts                = false;
 
    pix16_window(pix, x, y, w, h);
@@ -3986,6 +3994,9 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
    begin      = pix16_scroll(selection, count, rows);
    row_y0     = y + 6 + ((h - 12) - (int)rows * PIX16_J_ROW_H) / 2;
    show_glove = !(pix->opt_back && pix16_stack_depth() == 1);
+   sel_light  = pix16_sel_light(pix);
+   sel_text   = pix->colors[sel_light ? PIX16_C_J_EDGE : PIX16_C_J_TEXT];
+   sel_value  = pix->colors[sel_light ? PIX16_C_J_EDGE : PIX16_C_J_VALUE];
 
    /* Selection bar. It rides with the glove, so the highlight and the
     * finger move as one; drawn before the rows so their text stays on
@@ -4039,11 +4050,12 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
          if (value_len > 12)
             value_len = 12;
          pix16_text_fit(pix, right - (int)value_len * PIX16_GLYPH_W, ty,
-               value, pix->colors[PIX16_C_J_VALUE], value_len);
+               value, selected ? sel_value : pix->colors[PIX16_C_J_VALUE],
+               value_len);
       }
       if (pix->entry.flags & MENU_ENTRY_FLAG_CHECKED)
          pix16_glyph(pix, right - (int)(value_len + 2) * PIX16_GLYPH_W, ty,
-               '*', pix->colors[PIX16_C_J_GOLD], 1);
+               '*', selected ? sel_value : pix->colors[PIX16_C_J_GOLD], 1);
 
       {
          int lx = x + 24 + (hearts ? 10 : 0);
@@ -4054,7 +4066,8 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
                   - (value_len ? (int)(value_len + 1) * PIX16_GLYPH_W : 0))
                   / PIX16_GLYPH_W);
          pix16_text_ticker(pix, lx, ty, label,
-               pix->colors[PIX16_C_J_TEXT], max_label, selected);
+               selected ? sel_text : pix->colors[PIX16_C_J_TEXT],
+               max_label, selected);
          if (selected && pix16_strlen_glyphs(label) > max_label)
          {
             pix->sel_cut = true;
@@ -4136,12 +4149,16 @@ static void pix16_j_grid_tile(pix16_t *pix, size_t list_idx, int tx,
    }
    pix16_j_tile(pix, tx, ty, tw, PIX16_TILE_H, selected);
    pix->text_shadow = true;
-   pix16_tile_icon(pix, &t, tx, ty + 3 + bob, tw, pix->colors[PIX16_C_J_TEXT],
-         pix->colors[PIX16_C_J_GOLD]);
-   pix16_tile_label(pix, &t, tx,
-         ty + PIX16_TILE_H - PIX16_LABEL_PAD - PIX16_GLYPH_H, tw,
-         selected ? pix->colors[PIX16_C_J_GOLD] : pix->colors[PIX16_C_J_TEXT],
-         selected);
+   {
+      /* a pale selection tile needs dark art and label to read */
+      bool dark = selected && pix16_sel_light(pix);
+      uint16_t text_c = pix->colors[dark ? PIX16_C_J_EDGE : PIX16_C_J_TEXT];
+      uint16_t gold_c = pix->colors[dark ? PIX16_C_J_EDGE : PIX16_C_J_GOLD];
+      pix16_tile_icon(pix, &t, tx, ty + 3 + bob, tw, text_c, gold_c);
+      pix16_tile_label(pix, &t, tx,
+            ty + PIX16_TILE_H - PIX16_LABEL_PAD - PIX16_GLYPH_H, tw,
+            selected ? gold_c : pix->colors[PIX16_C_J_TEXT], selected);
+   }
    pix->text_shadow = false;
 }
 
