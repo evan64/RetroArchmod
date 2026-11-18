@@ -5885,6 +5885,41 @@ static size_t setting_get_string_representation_uint_pix16_palette(
                   msg_hash_to_str(
                      MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_CRIMSON),
                   len);
+         case PIX16_PALETTE_COBALT:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_COBALT),
+                  len);
+         case PIX16_PALETTE_FOREST:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_FOREST),
+                  len);
+         case PIX16_PALETTE_PLUM:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_PLUM),
+                  len);
+         case PIX16_PALETTE_SAKURA:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_SAKURA),
+                  len);
+         case PIX16_PALETTE_OCEAN:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_OCEAN),
+                  len);
+         case PIX16_PALETTE_COPPER:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_COPPER),
+                  len);
+         case PIX16_PALETTE_MIDNIGHT:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_MIDNIGHT),
+                  len);
       }
    }
    return 0;
