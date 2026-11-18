@@ -15307,6 +15307,7 @@ unsigned menu_displaylist_build_list(
                {MENU_ENUM_LABEL_MENU_PIX16_BUTTON_STYLE,                      PARSE_ONLY_UINT,   true},
                {MENU_ENUM_LABEL_MENU_PIX16_TRANSITION,                        PARSE_ONLY_UINT,   true},
                {MENU_ENUM_LABEL_MENU_PIX16_PALETTE,                           PARSE_ONLY_UINT,   true},
+               {MENU_ENUM_LABEL_MENU_PIX16_REDUCED_MOTION,                    PARSE_ONLY_BOOL,   true},
                {MENU_ENUM_LABEL_MENU_USE_PREFERRED_SYSTEM_COLOR_THEME,        PARSE_ONLY_BOOL,   true},
                {MENU_ENUM_LABEL_MENU_WALLPAPER,                               PARSE_ONLY_PATH ,  true},
                {MENU_ENUM_LABEL_DYNAMIC_WALLPAPER,                            PARSE_ONLY_BOOL ,  true},

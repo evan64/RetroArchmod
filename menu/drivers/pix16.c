@@ -550,6 +550,7 @@ typedef struct
    bool screen_prompt;        /* the question is on screen now */
    unsigned screen_sel;       /* 0 = 4:3, 1 = widescreen */
    bool wide_cfg;             /* the Widescreen Layout setting */
+   bool reduced_motion;       /* the Reduced Motion setting */
    bool boot_active;
    bool boot_counted;
    bool cnt_done;
@@ -914,6 +915,12 @@ static void pix16_text_ticker(pix16_t *pix, int x, int y, const char *s,
       pix16_text_fit(pix, x, y, s, color, max_chars);
       return;
    }
+   if (pix->reduced_motion)
+   {
+      /* resting only: no scrolling */
+      pix16_text_fit(pix, x, y, s, color, max_chars);
+      return;
+   }
 
    /* which label this is (text and place), and since when */
    for (p = s; *p; p++)
@@ -1211,17 +1218,19 @@ static const char *pix16_glove[9] = {
 };
 
 /* Idle bounce: the glove nudges back and forth like an FF cursor */
-static int pix16_glove_bounce(void)
+static int pix16_glove_bounce(const pix16_t *pix)
 {
    static const int8_t seq[8] = { 0, 1, 2, 2, 1, 0, 0, 0 };
    retro_time_t ms = menu_driver_get_current_time() / 1000;
+   if (pix->reduced_motion)
+      return 0;
    return seq[(ms / 90) % 8];
 }
 
 static void pix16_glove_cursor(pix16_t *pix, int x, int y)
 {
    int gx, gy;
-   x -= pix16_glove_bounce();
+   x -= pix16_glove_bounce(pix);
    for (gy = 0; gy < 9; gy++)
       for (gx = 0; gx < 13; gx++)
       {
@@ -1264,6 +1273,13 @@ static void pix16_glove_at(pix16_t *pix, int x, int y, uint32_t ctx)
       pix->glove_ctx    = ctx;
       pix->glove_from_x = pix->glove_to_x = x;
       pix->glove_from_y = pix->glove_to_y = y;
+      pix->glove_start  = now - (retro_time_t)PIX16_GLOVE_MS * 1000;
+   }
+   else if (pix->reduced_motion)
+   {
+      /* no slide: the glove is already where it was asked to be */
+      pix->glove_to_x   = pix->glove_from_x = x;
+      pix->glove_to_y   = pix->glove_from_y = y;
       pix->glove_start  = now - (retro_time_t)PIX16_GLOVE_MS * 1000;
    }
    else
@@ -1332,6 +1348,7 @@ static void pix16_load_settings(pix16_t *pix)
       pix->slide_active  = false;
    }
    pix->wide_cfg = settings && settings->bools.menu_pix16_widescreen;
+   pix->reduced_motion = settings && settings->bools.menu_pix16_reduced_motion;
    pix->start_enabled = settings && settings->bools.menu_pix16_start_screen;
    pix->screen_asked  = settings && settings->bools.menu_pix16_screen_asked;
    pix->buttons  = settings ? settings->uints.menu_pix16_button_style
@@ -2826,6 +2843,12 @@ static int pix16_grid_scroll(pix16_t *pix, size_t page)
       pix->grid_start   = now - (retro_time_t)PIX16_PAGE_MS * 1000;
       return target;
    }
+   else if (pix->reduced_motion)
+   {
+      pix->grid_from_px = pix->grid_to_px = target;
+      pix->grid_start   = now - (retro_time_t)PIX16_PAGE_MS * 1000;
+      return target;
+   }
    else
    {
       float t = (float)(now - pix->grid_start) / (PIX16_PAGE_MS * 1000.0f);
@@ -4062,7 +4085,7 @@ static void pix16_j_grid_tile(pix16_t *pix, size_t list_idx, int tx,
    int bob = 0;
    pix16_tile_info(pix, list_idx, &t);
 
-   if (selected)
+   if (selected && !pix->reduced_motion)
    {
       /* the chosen console floats up and down a pixel */
       static const int8_t seq[6] = { 0, -1, -1, 0, 1, 1 };
@@ -4273,6 +4296,8 @@ static void pix16_j_background(pix16_t *pix, int x0, int y0, int w, int h)
    uint16_t light = pix->bg_light;
    int off = (int)((menu_driver_get_current_time() / 1000 / 70) & 1023);
    int x, y;
+   if (pix->reduced_motion)
+      off = 0;                 /* the pattern does not drift */
    if (x0 < 0)
    {
       w += x0;
@@ -4354,7 +4379,7 @@ static bool pix16_popup_window(pix16_t *pix, int x, int y, int w, int h)
    pix->pop_rect.x = (int16_t)x; pix->pop_rect.y = (int16_t)y;
    pix->pop_rect.w = (int16_t)w; pix->pop_rect.h = (int16_t)h;
    pix->pop_rect.kind = PIX16_RECT_WIN;
-   if (t < 1.0f)
+   if (t < 1.0f && !pix->reduced_motion)
    {
       bool rec = pix->rec_on;
       pix->rec_on = false;
@@ -4396,6 +4421,11 @@ static void pix16_transition_overlay(pix16_t *pix, bool scrim)
 
    if (!pix->tr_active)
       return;
+   if (pix->reduced_motion)
+   {
+      pix->tr_active = false;
+      return;
+   }
    if (ms >= close_ms + PIX16_TR_OPEN_MS)
    {
       pix->tr_active = false;
@@ -5880,7 +5910,7 @@ static void pix16_tab_slide(pix16_t *pix)
    int off, x, y;
    uint16_t row[PIX16_FB_MAX_W];
 
-   if (t >= 1.0f)
+   if (t >= 1.0f || pix->reduced_motion)
    {
       pix->slide_active = false;
       return;
@@ -7588,6 +7618,7 @@ static void pix16_render(void *data, unsigned dims, bool is_idle)
             && pix16_is_grid_view();
       if (     pix->scr_key_valid && key != pix->scr_key
             && pix->slide_old
+            && !pix->reduced_motion
             && (  (opt_now && pix->prev_opt && tab != pix->prev_tab)
                || grid_now))
       {
@@ -7621,7 +7652,7 @@ static void pix16_render(void *data, unsigned dims, bool is_idle)
       {
          if (pop)
             pix->pop_t0 = now;
-         if (pix->pop_prev && jrpg)
+         if (pix->pop_prev && jrpg && !pix->reduced_motion)
          {
             /* the popup that just closed shrinks away (unless another
              * one replaced it straight away) */

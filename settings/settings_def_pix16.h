@@ -76,3 +76,12 @@ S_UINT_EX(menu_pix16_palette, MENU_PIX16_PALETTE,
       "Color Theme",
       "Overall color scheme of the pix16 menu.")
 #endif
+/* The configuration row lives under defined(HAVE_MENU) && defined(HAVE_PIX16); other passes are
+ * unaffected. */
+#if !defined(SETTINGS_DEF_CONFIG_PASS) || (defined(HAVE_MENU) && defined(HAVE_PIX16))
+S_BOOL(menu_pix16_reduced_motion, MENU_PIX16_REDUCED_MOTION,
+      "menu_pix16_reduced_motion",
+      DEFAULT_PIX16_REDUCED_MOTION, SD_FLAG_NONE, 0, 0,
+      "Reduced Motion",
+      "Turn off sliding, growing, scrolling and launch animations. Transitions become instant.")
+#endif
