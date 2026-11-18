@@ -15301,7 +15301,6 @@ unsigned menu_displaylist_build_list(
                {MENU_ENUM_LABEL_RGUI_MENU_COLOR_THEME,                        PARSE_ONLY_UINT,   true},
                {MENU_ENUM_LABEL_RGUI_MENU_THEME_PRESET,                       PARSE_ONLY_PATH,   false},
                {MENU_ENUM_LABEL_MENU_PIX16_WIDESCREEN,                        PARSE_ONLY_BOOL,   true},
-               {MENU_ENUM_LABEL_MENU_PIX16_CLASSIC_THEME,                     PARSE_ONLY_BOOL,   true},
                {MENU_ENUM_LABEL_MENU_PIX16_BOOT_SCREEN,                       PARSE_ONLY_BOOL,   true},
                {MENU_ENUM_LABEL_MENU_PIX16_START_SCREEN,                      PARSE_ONLY_BOOL,   true},
                {MENU_ENUM_LABEL_MENU_PIX16_BUTTON_STYLE,                      PARSE_ONLY_UINT,   true},

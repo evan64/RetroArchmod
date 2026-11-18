@@ -16,15 +16,6 @@ S_BOOL(menu_pix16_widescreen, MENU_PIX16_WIDESCREEN,
 /* The configuration row lives under defined(HAVE_MENU) && defined(HAVE_PIX16); other passes are
  * unaffected. */
 #if !defined(SETTINGS_DEF_CONFIG_PASS) || (defined(HAVE_MENU) && defined(HAVE_PIX16))
-S_BOOL(menu_pix16_classic_theme, MENU_PIX16_CLASSIC_THEME,
-      "menu_pix16_classic_theme",
-      DEFAULT_PIX16_CLASSIC_THEME, SD_FLAG_NONE, 0, 0,
-      "Classic Theme",
-      "Draw flat colored panels instead of the JRPG-style windows.")
-#endif
-/* The configuration row lives under defined(HAVE_MENU) && defined(HAVE_PIX16); other passes are
- * unaffected. */
-#if !defined(SETTINGS_DEF_CONFIG_PASS) || (defined(HAVE_MENU) && defined(HAVE_PIX16))
 S_BOOL(menu_pix16_boot_screen, MENU_PIX16_BOOT_SCREEN,
       "menu_pix16_boot_screen",
       DEFAULT_PIX16_BOOT_SCREEN, SD_FLAG_NONE, 0, 0,

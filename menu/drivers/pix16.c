@@ -1361,20 +1361,11 @@ static char *pix16_asset_path(const char *sub, const char *file,
    return path;
 }
 
-/* Theme and layout follow the settings, which can change at any time */
+/* Layout and look follow the settings, which can change at any time */
 static void pix16_load_settings(pix16_t *pix)
 {
    settings_t *settings = config_get_ptr();
    unsigned i;
-   unsigned theme       = (settings && settings->bools.menu_pix16_classic_theme)
-         ? PIX16_THEME_CLASSIC : PIX16_THEME_JRPG;
-   if (theme != pix->theme)
-   {
-      pix->theme         = theme;
-      pix->scr_key_valid = false;
-      pix->tr_active     = false;
-      pix->slide_active  = false;
-   }
    pix->wide_cfg = settings && settings->bools.menu_pix16_widescreen;
    pix->reduced_motion = settings && settings->bools.menu_pix16_reduced_motion;
    pix->start_enabled = settings && settings->bools.menu_pix16_start_screen;
