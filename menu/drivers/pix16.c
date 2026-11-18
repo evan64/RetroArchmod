@@ -5070,6 +5070,7 @@ static int pix16_boot_line_ms(pix16_t *pix, size_t i)
  * and RetroArch actually are. Gathered once per boot. */
 #define PIX16_INFO_ROWS 16
 #define PIX16_INFO_CHAR_MS 21   /* a little slower than the left column */
+#define PIX16_INFO_COLS 25      /* text columns in the specs panel */
 static char pix16_info[PIX16_INFO_ROWS][2][64];
 static int  pix16_info_n = -1;
 
@@ -5150,7 +5151,38 @@ static void pix16_info_build(void)
                memmove(f, f + strlen(drop[d]), strlen(f + strlen(drop[d])) + 1);
          }
       }
-      pix16_info_add("", model);
+      /* the model name gets lines of its own, without padding, wrapped
+       * to the width of the specs panel */
+      {
+         char *p = model;
+         while (*p)
+         {
+            char line[PIX16_INFO_COLS + 2];
+            size_t n;
+            while (*p == ' ')
+               p++;
+            if (!*p)
+               break;
+            n = strlen(p);
+            if (n > PIX16_INFO_COLS)
+            {
+               size_t cut = PIX16_INFO_COLS;
+               while (cut > 1 && p[cut] != ' ')
+                  cut--;
+               if (cut <= 1)
+                  cut = PIX16_INFO_COLS;
+               memcpy(line, p, cut);
+               line[cut] = '\0';
+               p += cut;
+            }
+            else
+            {
+               strlcpy(line, p, sizeof(line));
+               p += n;
+            }
+            pix16_info_add("", line);
+         }
+      }
    }
 
    {
@@ -5352,14 +5384,15 @@ static void pix16_draw_bios(pix16_t *pix, int ms)
    uint16_t dim   = pix->colors[PIX16_C_J_DIM];
    bool wide      = PIX16_FB_WIDTH > 320;
    int x = 20, y = wide ? 14 : 18, lh = wide ? 10 : 12;
+   int win_y = y - 8;
+   int win_h = 14 + (int)PIX16_BOOT_LINES * lh;
    int t = 0;
    size_t i;
 
    pix16_boot_count_step(pix);
    pix16_j_background(pix, 0, 0, PIX16_FB_WIDTH, PIX16_FB_HEIGHT);
    /* the readout sits in a window, like every other pix16 screen */
-   pix16_window(pix, x - 8, y - 8, 228,
-         14 + (int)PIX16_BOOT_LINES * lh);
+   pix16_window(pix, x - 8, win_y, 228, win_h);
    pix->text_shadow = true;
 
    for (i = 0; i < PIX16_BOOT_LINES; i++)
@@ -5414,16 +5447,25 @@ static void pix16_draw_bios(pix16_t *pix, int ms)
       y += lh;
    }
 
-   /* the mascot: along the bottom, under the text, drawn in by a
-    * scanning beam, then it idles */
+   /* the mascot: along the bottom, below the readout window, drawn in
+    * by a scanning beam, then it idles */
    {
+      int wb  = win_y + win_h;                /* window bottom */
       int bs  = wide ? 8 : 3;                 /* block size */
-      int lw  = PIX16_ALIEN_W * bs, lhh = PIX16_ALIEN_H * bs;
-      int lx  = wide ? 20 + (28 * PIX16_GLYPH_W - lw) / 2
-                     : PIX16_FB_WIDTH - 12 - lw;
-      int ly  = PIX16_FB_HEIGHT - 12 - lhh;
-      int rev = ms < 900 ? lhh * ms / 900 : lhh;   /* rows revealed */
-      int cy1 = pix->clip_y1;
+      int lw, lhh, lx, ly, rev, cy1;
+      /* bottom-aligned; if the window leaves too little room, shrink it
+       * until the mascot clears the window and fits on screen */
+      while (bs > 2 && PIX16_FB_HEIGHT - 4 - PIX16_ALIEN_H * bs < wb + 4)
+         bs--;
+      lw  = PIX16_ALIEN_W * bs;
+      lhh = PIX16_ALIEN_H * bs;
+      lx  = wide ? 20 + (28 * PIX16_GLYPH_W - lw) / 2
+                 : PIX16_FB_WIDTH - 12 - lw;
+      ly  = PIX16_FB_HEIGHT - 4 - lhh;
+      if (ly < wb + 4)
+         ly = wb + 4;
+      rev = ms < 900 ? lhh * ms / 900 : lhh;   /* rows revealed */
+      cy1 = pix->clip_y1;
       if (rev > 0)
       {
          pix->clip_y1 = ly + rev < cy1 ? ly + rev : cy1;
