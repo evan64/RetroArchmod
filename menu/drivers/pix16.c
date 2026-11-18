@@ -1289,8 +1289,10 @@ static uint32_t pix16_glove_context(const pix16_t *pix, unsigned extra)
    return h ^ (extra * 2654435761u) ^ (uint32_t)pix16_stack_depth();
 }
 
-/* Draws the glove, sliding it from where it was to (x, y) */
-static void pix16_glove_at(pix16_t *pix, int x, int y, uint32_t ctx)
+/* Advances the glove's slide from where it was to (x, y) and returns the
+ * position it is at now */
+static void pix16_glove_update(pix16_t *pix, int x, int y, uint32_t ctx,
+      int *out_x, int *out_y)
 {
    retro_time_t now = menu_driver_get_current_time();
    int cx = x, cy = y;
@@ -1333,6 +1335,15 @@ static void pix16_glove_at(pix16_t *pix, int x, int y, uint32_t ctx)
       }
    }
 
+   *out_x = cx;
+   *out_y = cy;
+}
+
+/* Draws the glove, sliding it from where it was to (x, y) */
+static void pix16_glove_at(pix16_t *pix, int x, int y, uint32_t ctx)
+{
+   int cx, cy;
+   pix16_glove_update(pix, x, y, ctx, &cx, &cy);
    pix16_glove_cursor(pix, cx, cy);
 }
 
@@ -3953,8 +3964,10 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
    file_list_t *list          = pix16_selection_buf();
    size_t selection           = menu_st->selection_ptr;
    size_t i, begin, rows, count;
-   int row_y, glove_y = 0;
+   int row_y0, row_y;
+   int glove_x = 0, glove_y = 0;
    bool has_glove             = false;
+   bool show_glove;
    bool hearts                = false;
 
    pix16_window(pix, x, y, w, h);
@@ -3970,8 +3983,28 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
       return;
    }
 
-   begin = pix16_scroll(selection, count, rows);
-   row_y = y + 6 + ((h - 12) - (int)rows * PIX16_J_ROW_H) / 2;
+   begin      = pix16_scroll(selection, count, rows);
+   row_y0     = y + 6 + ((h - 12) - (int)rows * PIX16_J_ROW_H) / 2;
+   show_glove = !(pix->opt_back && pix16_stack_depth() == 1);
+
+   /* Selection bar. It rides with the glove, so the highlight and the
+    * finger move as one; drawn before the rows so their text stays on
+    * top of it. */
+   if (selection >= begin && selection < begin + rows)
+   {
+      int pad   = (PIX16_J_ROW_H - PIX16_GLYPH_H) / 2;
+      int ty    = row_y0 + (int)(selection - begin) * PIX16_J_ROW_H + pad;
+      int bar_y = ty - pad;
+      if (show_glove)
+      {
+         pix16_glove_update(pix, x + 7, ty - 1,
+               pix16_glove_context(pix, 2 + (unsigned)x), &glove_x, &glove_y);
+         bar_y     = glove_y + 1 - pad;
+         has_glove = true;
+      }
+      pix16_vgradient(pix, x + 6, bar_y, w - 12, PIX16_J_ROW_H,
+            pix->sel_top, pix->sel_bot);
+   }
 
    /* game lists get a heart column (not the Favorites list itself) */
    {
@@ -3985,7 +4018,8 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
          }
    }
 
-   for (i = begin; i < count && i < begin + rows; i++, row_y += PIX16_J_ROW_H)
+   for (i = begin, row_y = row_y0; i < count && i < begin + rows;
+         i++, row_y += PIX16_J_ROW_H)
    {
       bool selected    = (i == selection);
       const char *label, *value;
@@ -3998,16 +4032,6 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
       value = pix16_entry_value(&pix->entry);
       if (list->list[i].label && string_is_equal(list->list[i].label, PIX16_FAV_LABEL))
          value = NULL;   /* the toggle has no "..." */
-
-      if (selected)
-      {
-         glove_y   = ty - 1;
-         has_glove = true;
-         /* the row gets the tile's selection gradient, so a list reads
-          * as clearly as the grid does */
-         pix16_vgradient(pix, x + 6, row_y, w - 12, PIX16_J_ROW_H,
-               pix->sel_top, pix->sel_bot);
-      }
 
       if (!string_is_empty(value))
       {
@@ -4039,8 +4063,8 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
       }
    }
 
-   if (has_glove && !(pix->opt_back && pix16_stack_depth() == 1))
-      pix16_glove_at(pix, x + 7, glove_y, pix16_glove_context(pix, 2 + (unsigned)x));
+   if (has_glove)
+      pix16_glove_cursor(pix, glove_x, glove_y);
 
    /* more above / below: little gold arrows on the frame */
    if (begin > 0)
