@@ -1348,28 +1348,53 @@ static void pix16_glove_at(pix16_t *pix, int x, int y, uint32_t ctx)
 }
 
 /* assets/pix16[/sub]/file[ext], on the heap (path buffers are too big
- * for the stack); NULL without an assets folder. Free it. */
+ * for the stack). Falls back to the assets an AppImage bundles when the
+ * user has none; NULL when nothing is found. Free it. */
 static char *pix16_asset_path(const char *sub, const char *file,
       const char *ext)
 {
    settings_t *settings = config_get_ptr();
+   const char *appdir;
    char *path, *tmp;
-   if (!settings || string_is_empty(settings->paths.directory_assets))
-      return NULL;
    if (!(path = (char*)malloc(2 * PATH_MAX_LENGTH)))
       return NULL;
    tmp = path + PATH_MAX_LENGTH;
-   fill_pathname_join_special(tmp, settings->paths.directory_assets,
-         "pix16", PATH_MAX_LENGTH);
-   if (sub)
+   if (settings && !string_is_empty(settings->paths.directory_assets))
    {
-      fill_pathname_join_special(path, tmp, sub, PATH_MAX_LENGTH);
-      strlcpy(tmp, path, PATH_MAX_LENGTH);
+      fill_pathname_join_special(tmp, settings->paths.directory_assets,
+            "pix16", PATH_MAX_LENGTH);
+      if (sub)
+      {
+         fill_pathname_join_special(path, tmp, sub, PATH_MAX_LENGTH);
+         strlcpy(tmp, path, PATH_MAX_LENGTH);
+      }
+      fill_pathname_join_special(path, tmp, file, PATH_MAX_LENGTH);
+      if (ext)
+         strlcat(path, ext, PATH_MAX_LENGTH);
+      if (path_is_valid(path))
+         return path;
    }
-   fill_pathname_join_special(path, tmp, file, PATH_MAX_LENGTH);
-   if (ext)
-      strlcat(path, ext, PATH_MAX_LENGTH);
-   return path;
+   /* an AppImage mounts its payload at $APPDIR */
+   appdir = getenv("APPDIR");
+   if (appdir && *appdir)
+   {
+      fill_pathname_join_special(tmp, appdir,
+            "usr" PATH_DEFAULT_SLASH() "share" PATH_DEFAULT_SLASH()
+            "retroarch" PATH_DEFAULT_SLASH() "assets" PATH_DEFAULT_SLASH()
+            "pix16", PATH_MAX_LENGTH);
+      if (sub)
+      {
+         fill_pathname_join_special(path, tmp, sub, PATH_MAX_LENGTH);
+         strlcpy(tmp, path, PATH_MAX_LENGTH);
+      }
+      fill_pathname_join_special(path, tmp, file, PATH_MAX_LENGTH);
+      if (ext)
+         strlcat(path, ext, PATH_MAX_LENGTH);
+      if (path_is_valid(path))
+         return path;
+   }
+   free(path);
+   return NULL;
 }
 
 /* Layout and look follow the settings, which can change at any time */
@@ -2505,6 +2530,29 @@ static bool pix16_has_subs(const pix16_t *pix, size_t host)
    return false;
 }
 
+/* List index of the playlist whose name matches this system, or
+ * PIX16_TOP_NONE */
+static size_t pix16_playlist_index(const pix16_t *pix, const char *name)
+{
+   file_list_t *list = pix16_selection_buf();
+   size_t i;
+   if (!list)
+      return PIX16_TOP_NONE;
+   for (i = 0; i < list->size; i++)
+   {
+      char base[NAME_MAX_LENGTH];
+      if (     list->list[i].type != FILE_TYPE_PLAYLIST_COLLECTION
+            || !list->list[i].path)
+         continue;
+      strlcpy(base, path_basename(list->list[i].path), sizeof(base));
+      path_remove_extension(base);
+      pix16_canon_name(base, sizeof(base));
+      if (string_is_equal_noncase(base, name))
+         return i;
+   }
+   return PIX16_TOP_NONE;
+}
+
 static void pix16_grid_build(pix16_t *pix)
 {
    file_list_t *list = pix16_selection_buf();
@@ -2581,7 +2629,30 @@ static void pix16_grid_build(pix16_t *pix)
          break;
       }
    }
+   /* ARCADE: two or more arcade playlists share one tile; the first in
+    * list order stands in for the group */
    pix->arcade_rep = PIX16_TOP_NONE;
+   for (i = 0; i < n; i++)
+   {
+      if (list->list[i].type != FILE_TYPE_PLAYLIST_COLLECTION)
+         continue;
+      if (pix16_sub_host(pix, i) != PIX16_TOP_NONE)
+         continue;
+      if (pix16_is_arcade_playlist(list->list[i].path))
+         pix->arcade_idx[pix->arcade_count++] = i;
+   }
+   if (pix->arcade_count >= 2)
+      pix->arcade_rep = pix->arcade_idx[0];
+   else
+      pix->arcade_count = 0;
+
+   /* PC Engine + PC Engine CD share one tile when both are there */
+   pix->pce_cart = pix16_playlist_index(pix,
+         "NEC - PC Engine - TurboGrafx 16");
+   pix->pce_cd   = pix16_playlist_index(pix,
+         "NEC - PC Engine CD - TurboGrafx-CD");
+   if (pix->pce_cart == PIX16_TOP_NONE || pix->pce_cd == PIX16_TOP_NONE)
+      pix->pce_cart = pix->pce_cd = PIX16_TOP_NONE;
 
    for (i = 0; i < n; i++)
    {
@@ -2590,6 +2661,12 @@ static void pix16_grid_build(pix16_t *pix)
       {
          if (pix16_sub_host(pix, i) != PIX16_TOP_NONE)
             ;  /* shown inside its host's tile */
+         else if (     pix->arcade_rep != PIX16_TOP_NONE
+                    && i != pix->arcade_rep
+                    && pix16_is_arcade_playlist(list->list[i].path))
+            ;  /* shown inside the ARCADE tile */
+         else if (pix16_pce_grouped(pix) && i == pix->pce_cd)
+            ;  /* shown inside the PC Engine tile */
          else
             pix->grid_map[pix->grid_count++] = i;
       }
