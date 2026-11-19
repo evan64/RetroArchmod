@@ -2168,6 +2168,7 @@ static const struct pix16_art *pix16_art_get(pix16_t *pix,
       path = pix16_asset_path(NULL, playlist_base + 1, ".png");
    else
    {
+      const char *appdir;
       settings_t *settings = config_get_ptr();
       if (!(path = (char*)malloc(PATH_MAX_LENGTH)))
          return NULL;
@@ -2177,6 +2178,19 @@ static const struct pix16_art *pix16_art_get(pix16_t *pix,
          fill_pathname_join_special(path, settings->paths.directory_assets,
                "xmb" PATH_DEFAULT_SLASH() "dot-art" PATH_DEFAULT_SLASH() "png",
                PATH_MAX_LENGTH);
+         fill_pathname_slash(path, PATH_MAX_LENGTH);
+         strlcat(path, playlist_base, PATH_MAX_LENGTH);
+         strlcat(path, ".png", PATH_MAX_LENGTH);
+      }
+      /* the icons an AppImage bundles, when the user has none */
+      appdir = getenv("APPDIR");
+      if (!path_is_valid(path) && appdir && *appdir)
+      {
+         fill_pathname_join_special(path, appdir,
+               "usr" PATH_DEFAULT_SLASH() "share" PATH_DEFAULT_SLASH()
+               "retroarch" PATH_DEFAULT_SLASH() "assets" PATH_DEFAULT_SLASH()
+               "xmb" PATH_DEFAULT_SLASH() "dot-art" PATH_DEFAULT_SLASH()
+               "png", PATH_MAX_LENGTH);
          fill_pathname_slash(path, PATH_MAX_LENGTH);
          strlcat(path, playlist_base, PATH_MAX_LENGTH);
          strlcat(path, ".png", PATH_MAX_LENGTH);
