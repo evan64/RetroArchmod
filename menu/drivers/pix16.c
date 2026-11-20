@@ -457,6 +457,8 @@ typedef struct
    size_t cnt_tail;
    menu_entry_t entry;        /* large: kept off the stack */
    pix16_wiz_t wiz;           /* the Add System wizard */
+   pix16_rect_t empty_rect;  /* the no systems window, for clicks */
+   bool empty_show;           /* the window is on screen now */
 
    /* list index of History / Favorites, or (size_t)-1 when hidden */
    size_t top_idx[2];
@@ -525,8 +527,26 @@ typedef struct
    bool gear_focus;           /* the options gear (not a list entry) */
    bool power_focus;          /* the power button, top left (ditto) */
    bool add_focus;            /* the + (Add System) button */
+   bool order_focus;          /* the order (arrange) button */
    bool sel_cut;              /* the selected row did not fit */
    bool arcade_open;          /* picker window showing (ARCADE or PCE) */
+   bool order_open;           /* system order window showing */   bool mg_open;              /* actions window for one system */
+   bool mg_pick;              /* choosing a system to merge into */
+   bool mg_icon;              /* the picker is choosing an icon */
+   bool mg_icon_more;         /* showing the icon categories */
+   int  mg_icon_cat;          /* >= 0: showing that category's icons */
+   int mg_sel;                /* highlighted row */
+   size_t mg_n;               /* rows in the merge picker */
+   size_t mg_map[64];         /* grid indices, for the picker */
+   char mg_label[64][40];     /* their labels */
+   char mg_name[NAME_MAX_LENGTH];   /* system the actions apply to */
+   char mg_member[NAME_MAX_LENGTH]; /* its playlist name */
+
+   int order_sel;             /* highlighted row */
+   size_t order_n;            /* rows in it */
+   size_t order_map[64];      /* list indices, top to bottom */
+   char order_label[64][40];  /* their names, copied when it opens */
+   unsigned char order_state[64]; /* 0 tile, 1 merged away, 2 hidden */
    bool picker_pce;           /* ...and it is the PC Engine one */
    bool from_gear;            /* options were opened with the gear */
    bool game_menu_open;       /* RUN / LOAD SAVE window for a game */
@@ -550,6 +570,7 @@ typedef struct
    bool screen_prompt;        /* the question is on screen now */
    unsigned screen_sel;       /* 0 = 4:3, 1 = widescreen */
    bool wide_cfg;             /* the Widescreen Layout setting */
+   bool reduced_motion;       /* the Reduced Motion setting */
    bool boot_active;
    bool boot_counted;
    bool cnt_done;
@@ -699,7 +720,35 @@ static const pix16_palette_t pix16_palettes[PIX16_PALETTE_LAST] = {
    /* Crimson */
    { 0xFF1A0A0C, 0xFF261014, 0xFF321418, 0xFF0E0507, 0xFF0E0507,
      0xFF240A0E, 0xFFA02830, 0xFF3A0A10, 0xFFF2A0A0, 0xFFFFB0B0,
-     0xFF0E0508, 0xFF2E0C12, 0xFFFF8A8A, 0xFFA02030 }
+     0xFF0E0508, 0xFF2E0C12, 0xFFFF8A8A, 0xFFA02030 },
+   /* Cobalt */
+   { 0xFF0A1224, 0xFF101C38, 0xFF16243F, 0xFF060A16, 0xFF080E1C,
+     0xFF14203A, 0xFF24509E, 0xFF0C1C40, 0xFFF0C870, 0xFFA8CEFF,
+     0xFF060C18, 0xFF1A2E56, 0xFF86B4F0, 0xFF2A4E92 },
+   /* Forest */
+   { 0xFF08160C, 0xFF0E2012, 0xFF142A1A, 0xFF040C06, 0xFF07120A,
+     0xFF12241A, 0xFF2E7038, 0xFF0A2814, 0xFFE8D478, 0xFFA8E0A8,
+     0xFF050E07, 0xFF1E4026, 0xFF90D898, 0xFF2E6836 },
+   /* Plum */
+   { 0xFF150A1E, 0xFF1E0E2A, 0xFF2A1438, 0xFF0A0410, 0xFF120818,
+     0xFF22102E, 0xFF7030A0, 0xFF2A0C40, 0xFFF0B870, 0xFFE0A8FF,
+     0xFF0C0512, 0xFF341A4C, 0xFFC890F0, 0xFF7030A0 },
+   /* Sakura */
+   { 0xFF1A0C14, 0xFF24121C, 0xFF341A26, 0xFF0E060A, 0xFF180A12,
+     0xFF2C1420, 0xFFA04870, 0xFF3A1428, 0xFFFFD8B8, 0xFFFFB8D8,
+     0xFF12060E, 0xFF502436, 0xFFFFC0DC, 0xFFA04870 },
+   /* Ocean */
+   { 0xFF20207A, 0xFF2A2A8E, 0xFF3838A8, 0xFF10104A, 0xFF24247E,
+     0xFF4646C0, 0xFF6060D8, 0xFF2A2A82, 0xFFF0E488, 0xFFD0D0FF,
+     0xFF1A1A6E, 0xFF4A4AC4, 0xFF8A8AE8, 0xFF4040A8 },
+   /* Copper */
+   { 0xFF1C1208, 0xFF26180C, 0xFF321E10, 0xFF0C0702, 0xFF180E06,
+     0xFF2C1A0C, 0xFF90501E, 0xFF3C1C08, 0xFFF0C088, 0xFFFFD0A0,
+     0xFF120A04, 0xFF402612, 0xFFC07838, 0xFF7A3E12 },
+   /* Midnight */
+   { 0xFF05050C, 0xFF090A14, 0xFF121220, 0xFF020204, 0xFF05050A,
+     0xFF0E0E1A, 0xFF1C1C3E, 0xFF07070E, 0xFFE8C860, 0xFFB4C4E4,
+     0xFF030306, 0xFF16162A, 0xFF7078A8, 0xFF1E2042 }
 };
 
 /* Rough perceived brightness, 0..25500 */
@@ -914,6 +963,12 @@ static void pix16_text_ticker(pix16_t *pix, int x, int y, const char *s,
       pix16_text_fit(pix, x, y, s, color, max_chars);
       return;
    }
+   if (pix->reduced_motion)
+   {
+      /* resting only: no scrolling */
+      pix16_text_fit(pix, x, y, s, color, max_chars);
+      return;
+   }
 
    /* which label this is (text and place), and since when */
    for (p = s; *p; p++)
@@ -1054,6 +1109,22 @@ static void pix16_button_names(const pix16_t *pix, const char **l,
 
 static int pix16_pill(pix16_t *pix, int x, int y, const char *text,
       uint16_t bg, uint16_t fg);
+/* The actions button: Select on a pad, Right Shift on a keyboard */
+static const char *pix16_select_name(const pix16_t *pix)
+{
+   bool narrow = pix16_fb_w < PIX16_FB_MAX_W;
+   if (pix->keys)
+      return narrow ? "RSFT" : "RSHIFT";
+   switch (pix->buttons)
+   {
+      case PIX16_BUTTONS_NINTENDO:
+         return "-";
+      case PIX16_BUTTONS_XBOX:
+         return "VIEW";
+      default:
+         return narrow ? "SEL" : "SELECT";
+   }
+}
 
 /* Key names in the 4:3 layout sit in slimmer pills with less space
  * between items, so a full guide still fits */
@@ -1211,17 +1282,19 @@ static const char *pix16_glove[9] = {
 };
 
 /* Idle bounce: the glove nudges back and forth like an FF cursor */
-static int pix16_glove_bounce(void)
+static int pix16_glove_bounce(const pix16_t *pix)
 {
    static const int8_t seq[8] = { 0, 1, 2, 2, 1, 0, 0, 0 };
    retro_time_t ms = menu_driver_get_current_time() / 1000;
+   if (pix->reduced_motion)
+      return 0;
    return seq[(ms / 90) % 8];
 }
 
 static void pix16_glove_cursor(pix16_t *pix, int x, int y)
 {
    int gx, gy;
-   x -= pix16_glove_bounce();
+   x -= pix16_glove_bounce(pix);
    for (gy = 0; gy < 9; gy++)
       for (gx = 0; gx < 13; gx++)
       {
@@ -1252,8 +1325,10 @@ static uint32_t pix16_glove_context(const pix16_t *pix, unsigned extra)
    return h ^ (extra * 2654435761u) ^ (uint32_t)pix16_stack_depth();
 }
 
-/* Draws the glove, sliding it from where it was to (x, y) */
-static void pix16_glove_at(pix16_t *pix, int x, int y, uint32_t ctx)
+/* Advances the glove's slide from where it was to (x, y) and returns the
+ * position it is at now */
+static void pix16_glove_update(pix16_t *pix, int x, int y, uint32_t ctx,
+      int *out_x, int *out_y)
 {
    retro_time_t now = menu_driver_get_current_time();
    int cx = x, cy = y;
@@ -1264,6 +1339,13 @@ static void pix16_glove_at(pix16_t *pix, int x, int y, uint32_t ctx)
       pix->glove_ctx    = ctx;
       pix->glove_from_x = pix->glove_to_x = x;
       pix->glove_from_y = pix->glove_to_y = y;
+      pix->glove_start  = now - (retro_time_t)PIX16_GLOVE_MS * 1000;
+   }
+   else if (pix->reduced_motion)
+   {
+      /* no slide: the glove is already where it was asked to be */
+      pix->glove_to_x   = pix->glove_from_x = x;
+      pix->glove_to_y   = pix->glove_from_y = y;
       pix->glove_start  = now - (retro_time_t)PIX16_GLOVE_MS * 1000;
    }
    else
@@ -1289,49 +1371,75 @@ static void pix16_glove_at(pix16_t *pix, int x, int y, uint32_t ctx)
       }
    }
 
+   *out_x = cx;
+   *out_y = cy;
+}
+
+/* Draws the glove, sliding it from where it was to (x, y) */
+static void pix16_glove_at(pix16_t *pix, int x, int y, uint32_t ctx)
+{
+   int cx, cy;
+   pix16_glove_update(pix, x, y, ctx, &cx, &cy);
    pix16_glove_cursor(pix, cx, cy);
 }
 
 /* assets/pix16[/sub]/file[ext], on the heap (path buffers are too big
- * for the stack); NULL without an assets folder. Free it. */
+ * for the stack). Falls back to the assets an AppImage bundles when the
+ * user has none; NULL when nothing is found. Free it. */
 static char *pix16_asset_path(const char *sub, const char *file,
       const char *ext)
 {
    settings_t *settings = config_get_ptr();
+   const char *appdir;
    char *path, *tmp;
-   if (!settings || string_is_empty(settings->paths.directory_assets))
-      return NULL;
    if (!(path = (char*)malloc(2 * PATH_MAX_LENGTH)))
       return NULL;
    tmp = path + PATH_MAX_LENGTH;
-   fill_pathname_join_special(tmp, settings->paths.directory_assets,
-         "pix16", PATH_MAX_LENGTH);
-   if (sub)
+   if (settings && !string_is_empty(settings->paths.directory_assets))
    {
-      fill_pathname_join_special(path, tmp, sub, PATH_MAX_LENGTH);
-      strlcpy(tmp, path, PATH_MAX_LENGTH);
+      fill_pathname_join_special(tmp, settings->paths.directory_assets,
+            "pix16", PATH_MAX_LENGTH);
+      if (sub)
+      {
+         fill_pathname_join_special(path, tmp, sub, PATH_MAX_LENGTH);
+         strlcpy(tmp, path, PATH_MAX_LENGTH);
+      }
+      fill_pathname_join_special(path, tmp, file, PATH_MAX_LENGTH);
+      if (ext)
+         strlcat(path, ext, PATH_MAX_LENGTH);
+      if (path_is_valid(path))
+         return path;
    }
-   fill_pathname_join_special(path, tmp, file, PATH_MAX_LENGTH);
-   if (ext)
-      strlcat(path, ext, PATH_MAX_LENGTH);
-   return path;
+   /* an AppImage mounts its payload at $APPDIR */
+   appdir = getenv("APPDIR");
+   if (appdir && *appdir)
+   {
+      fill_pathname_join_special(tmp, appdir,
+            "usr" PATH_DEFAULT_SLASH() "share" PATH_DEFAULT_SLASH()
+            "retroarch" PATH_DEFAULT_SLASH() "assets" PATH_DEFAULT_SLASH()
+            "pix16", PATH_MAX_LENGTH);
+      if (sub)
+      {
+         fill_pathname_join_special(path, tmp, sub, PATH_MAX_LENGTH);
+         strlcpy(tmp, path, PATH_MAX_LENGTH);
+      }
+      fill_pathname_join_special(path, tmp, file, PATH_MAX_LENGTH);
+      if (ext)
+         strlcat(path, ext, PATH_MAX_LENGTH);
+      if (path_is_valid(path))
+         return path;
+   }
+   free(path);
+   return NULL;
 }
 
-/* Theme and layout follow the settings, which can change at any time */
+/* Layout and look follow the settings, which can change at any time */
 static void pix16_load_settings(pix16_t *pix)
 {
    settings_t *settings = config_get_ptr();
    unsigned i;
-   unsigned theme       = (settings && settings->bools.menu_pix16_classic_theme)
-         ? PIX16_THEME_CLASSIC : PIX16_THEME_JRPG;
-   if (theme != pix->theme)
-   {
-      pix->theme         = theme;
-      pix->scr_key_valid = false;
-      pix->tr_active     = false;
-      pix->slide_active  = false;
-   }
    pix->wide_cfg = settings && settings->bools.menu_pix16_widescreen;
+   pix->reduced_motion = settings && settings->bools.menu_pix16_reduced_motion;
    pix->start_enabled = settings && settings->bools.menu_pix16_start_screen;
    pix->screen_asked  = settings && settings->bools.menu_pix16_screen_asked;
    pix->buttons  = settings ? settings->uints.menu_pix16_button_style
@@ -1619,6 +1727,9 @@ static void pix16_canon_name(char *base, size_t len)
 
 /* Playlist display name -> short name/colours */
 static void pix16_system_lookup(pix16_t *pix, const char *name,
+      char *short_out, size_t short_len, uint16_t *bg, uint16_t *fg);
+
+static void pix16_system_lookup_raw(pix16_t *pix, const char *name,
       char *short_out, size_t short_len, uint16_t *bg, uint16_t *fg)
 {
    size_t i;
@@ -2068,10 +2179,17 @@ static bool pix16_art_from_dot_art(pix16_t *pix, struct pix16_art *art,
    return true;
 }
 
+static const char *pix16_name_of(const char *playlist);
+static void pix16_order_refresh(pix16_t *pix);
+static const char *pix16_icon_of(const char *playlist);
+
 static const struct pix16_art *pix16_art_get(pix16_t *pix,
       const char *playlist_base)
 {
    char *path;
+   const char *icon = pix16_icon_of(playlist_base);
+   if (icon && icon[0])
+      playlist_base = icon;
    struct texture_image ti;
    struct pix16_art *art, *grown;
    size_t i, n;
@@ -2096,6 +2214,7 @@ static const struct pix16_art *pix16_art_get(pix16_t *pix,
       path = pix16_asset_path(NULL, playlist_base + 1, ".png");
    else
    {
+      const char *appdir;
       settings_t *settings = config_get_ptr();
       if (!(path = (char*)malloc(PATH_MAX_LENGTH)))
          return NULL;
@@ -2105,6 +2224,19 @@ static const struct pix16_art *pix16_art_get(pix16_t *pix,
          fill_pathname_join_special(path, settings->paths.directory_assets,
                "xmb" PATH_DEFAULT_SLASH() "dot-art" PATH_DEFAULT_SLASH() "png",
                PATH_MAX_LENGTH);
+         fill_pathname_slash(path, PATH_MAX_LENGTH);
+         strlcat(path, playlist_base, PATH_MAX_LENGTH);
+         strlcat(path, ".png", PATH_MAX_LENGTH);
+      }
+      /* the icons an AppImage bundles, when the user has none */
+      appdir = getenv("APPDIR");
+      if (!path_is_valid(path) && appdir && *appdir)
+      {
+         fill_pathname_join_special(path, appdir,
+               "usr" PATH_DEFAULT_SLASH() "share" PATH_DEFAULT_SLASH()
+               "retroarch" PATH_DEFAULT_SLASH() "assets" PATH_DEFAULT_SLASH()
+               "xmb" PATH_DEFAULT_SLASH() "dot-art" PATH_DEFAULT_SLASH()
+               "png", PATH_MAX_LENGTH);
          fill_pathname_slash(path, PATH_MAX_LENGTH);
          strlcat(path, playlist_base, PATH_MAX_LENGTH);
          strlcat(path, ".png", PATH_MAX_LENGTH);
@@ -2206,7 +2338,23 @@ static void pix16_art_draw(pix16_t *pix, const struct pix16_art *art,
 /* Display order: systems (playlists) first, then History, Favorites
  * and the rest */
 #define PIX16_TOP_NONE ((size_t)-1)
-#define PIX16_BAR_FOCUS(p) ((p)->gear_focus || (p)->power_focus || (p)->add_focus)
+#define PIX16_BAR_FOCUS(p) ((p)->gear_focus || (p)->power_focus || (p)->add_focus || (p)->order_focus)
+
+/* A rename from the actions window takes the place of the table name */
+static void pix16_system_lookup(pix16_t *pix, const char *name,
+      char *short_out, size_t short_len, uint16_t *bg, uint16_t *fg)
+{
+   char base[NAME_MAX_LENGTH];
+   const char *renamed;
+
+   pix16_system_lookup_raw(pix, name, short_out, short_len, bg, fg);
+   strlcpy(base, name ? name : "", sizeof(base));
+   path_remove_extension(base);
+   pix16_canon_name(base, sizeof(base));
+   renamed = pix16_name_of(base);
+   if (renamed && renamed[0])
+      strlcpy(short_out, renamed, short_len);
+}
 
 /* the first rows of pix16_systems are the arcade boards */
 #define PIX16_ARCADE_ROWS 5
@@ -2342,6 +2490,334 @@ static void pix16_groups_set(const char *member, const char *host)
 }
 
 /* "HOME", "ARCADE", a host playlist name, or NULL (no line for it) */
+static const char *pix16_group_host_of(const char *path);
+
+
+/* Renames and icon swaps set from the actions window, one line each:
+ * pix16_names.txt / pix16_icons.txt,   <playlist name> = <value> */
+#define PIX16_OVR_MAX 64
+typedef struct
+{
+   char member[NAME_MAX_LENGTH];
+   char value[NAME_MAX_LENGTH];
+} pix16_ovr_t;
+
+static pix16_ovr_t pix16_names[PIX16_OVR_MAX];
+static size_t pix16_names_n;
+static pix16_ovr_t pix16_icons[PIX16_OVR_MAX];
+static size_t pix16_icons_n;
+static bool pix16_ovr_loaded;
+
+static char *pix16_cfg_file(const char *leaf)
+{
+   settings_t *settings = config_get_ptr();
+   const char *cfg      = path_get(RARCH_PATH_CONFIG);
+   char *path           = (char*)malloc(2 * PATH_MAX_LENGTH);
+   char *dir;
+   if (!path)
+      return NULL;
+   dir = path + PATH_MAX_LENGTH;
+   if (settings && !string_is_empty(settings->paths.directory_menu_config))
+      strlcpy(dir, settings->paths.directory_menu_config, PATH_MAX_LENGTH);
+   else if (!string_is_empty(cfg))
+      fill_pathname_basedir(dir, cfg, PATH_MAX_LENGTH);
+   else
+   {
+      free(path);
+      return NULL;
+   }
+   fill_pathname_join_special(path, dir, leaf, PATH_MAX_LENGTH);
+   return path;
+}
+
+static void pix16_ovr_load(pix16_ovr_t *arr, size_t *n, const char *leaf)
+{
+   char line[NAME_MAX_LENGTH * 2];
+   char *path = pix16_cfg_file(leaf);
+   RFILE *f   = NULL;
+
+   *n = 0;
+   if (path && path_is_valid(path))
+      f = filestream_open(path, RETRO_VFS_FILE_ACCESS_READ,
+            RETRO_VFS_FILE_ACCESS_HINT_NONE);
+   free(path);
+   if (!f)
+      return;
+   while (*n < PIX16_OVR_MAX && filestream_gets(f, line, sizeof(line)))
+   {
+      char *eq;
+      pix16_trim(line);
+      if (!line[0] || line[0] == '#')
+         continue;
+      eq = strchr(line, '=');
+      if (!eq)
+         continue;
+      *eq = '\0';
+      strlcpy(arr[*n].member, line, sizeof(arr[0].member));
+      strlcpy(arr[*n].value,  eq + 1, sizeof(arr[0].value));
+      pix16_trim(arr[*n].member);
+      pix16_trim(arr[*n].value);
+      if (arr[*n].member[0])
+         (*n)++;
+   }
+   filestream_close(f);
+}
+
+static bool pix16_ovr_save(pix16_ovr_t *arr, size_t n, const char *leaf)
+{
+   char *path = pix16_cfg_file(leaf);
+   RFILE *f;
+   size_t i;
+
+   if (!path)
+      return false;
+   f = filestream_open(path, RETRO_VFS_FILE_ACCESS_WRITE,
+         RETRO_VFS_FILE_ACCESS_HINT_NONE);
+   free(path);
+   if (!f)
+      return false;
+   filestream_printf(f, "# pix16: set from the arrange window; safe to edit.\n");
+   for (i = 0; i < n; i++)
+      filestream_printf(f, "%s = %s\n", arr[i].member, arr[i].value);
+   filestream_close(f);
+   return true;
+}
+
+static const char *pix16_ovr_get(pix16_ovr_t *arr, size_t n, const char *member)
+{
+   size_t i;
+   if (!member || !member[0])
+      return NULL;
+   for (i = 0; i < n; i++)
+      if (string_is_equal_noncase(arr[i].member, member))
+         return arr[i].value;
+   return NULL;
+}
+
+static void pix16_ovr_set(pix16_ovr_t *arr, size_t *n, const char *leaf,
+      const char *member, const char *value)
+{
+   size_t i;
+   if (!member || !member[0])
+      return;
+   for (i = 0; i < *n; i++)
+      if (string_is_equal_noncase(arr[i].member, member))
+         break;
+   if (i == *n)
+   {
+      if (*n >= PIX16_OVR_MAX)
+         return;
+      (*n)++;
+   }
+   strlcpy(arr[i].member, member, sizeof(arr[0].member));
+   strlcpy(arr[i].value, value ? value : "", sizeof(arr[0].value));
+   if (!arr[i].value[0])
+   {
+      memmove(&arr[i], &arr[i + 1], (*n - i - 1) * sizeof(arr[0]));
+      (*n)--;
+   }
+   pix16_ovr_save(arr, *n, leaf);
+}
+
+static void pix16_ovr_ready(void)
+{
+   if (pix16_ovr_loaded)
+      return;
+   pix16_ovr_loaded = true;
+   pix16_ovr_load(pix16_names, &pix16_names_n, "pix16_names.txt");
+   pix16_ovr_load(pix16_icons, &pix16_icons_n, "pix16_icons.txt");
+}
+
+/* The name a tile shows, if the user renamed it */
+static const char *pix16_name_of(const char *playlist)
+{
+   pix16_ovr_ready();
+   return pix16_ovr_get(pix16_names, pix16_names_n, playlist);
+}
+
+/* The dot-art icon a tile uses, if the user swapped it */
+static const char *pix16_icon_of(const char *playlist)
+{
+   pix16_ovr_ready();
+   return pix16_ovr_get(pix16_icons, pix16_icons_n, playlist);
+}
+
+static pix16_t *pix16_mg_owner;
+
+/* RENAME... from the actions window */
+static void pix16_mg_kb_cb(void *userdata, const char *str)
+{
+   pix16_t *pix     = pix16_mg_owner;
+   const char *line = menu_input_dialog_get_buffer();
+   char name[NAME_MAX_LENGTH];
+
+   (void)userdata;
+   (void)str;
+   if (pix && line && *line)
+   {
+      strlcpy(name, line, sizeof(name));
+      pix16_trim(name);
+      if (name[0])
+      {
+         pix16_ovr_set(pix16_names, &pix16_names_n, "pix16_names.txt",
+               pix->mg_member, name);
+         pix->mg_open = false;
+         pix16_order_refresh(pix);
+         menu_state_get_ptr()->flags |= MENU_ST_FLAG_ENTRIES_NEED_REFRESH;
+      }
+   }
+   menu_input_dialog_end();
+}
+
+
+/* Every icon the Dot-Art folder holds, sorted into groups for the
+ * CHANGE ICON picker's MORE list */
+enum { PIX16_CAT_CONSOLE = 0, PIX16_CAT_HANDHELD, PIX16_CAT_COMPUTER,
+       PIX16_CAT_MISC, PIX16_CAT_COUNT };
+#define PIX16_ICON_MAX 1200
+
+static char pix16_icon_all[PIX16_ICON_MAX][64];
+static unsigned char pix16_icon_all_cat[PIX16_ICON_MAX];
+static size_t pix16_icon_all_n;
+static bool pix16_icon_scanned;
+
+static bool pix16_has_icase(const char *hay, const char *needle)
+{
+   char a[128], b[64];
+   size_t i;
+   strlcpy(a, hay ? hay : "", sizeof(a));
+   strlcpy(b, needle ? needle : "", sizeof(b));
+   for (i = 0; a[i]; i++)
+      if (a[i] >= 'A' && a[i] <= 'Z')
+         a[i] = (char)(a[i] + 32);
+   for (i = 0; b[i]; i++)
+      if (b[i] >= 'A' && b[i] <= 'Z')
+         b[i] = (char)(b[i] + 32);
+   return strstr(a, b) != NULL;
+}
+
+/* Icons that are menu furniture or derivatives rather than a system */
+static bool pix16_icon_skip(const char *n)
+{
+   static const char *prefixes[] = {
+      "input_", "menu_", "core-", "Source Code - ",
+      "Non Redump - ", "Non-Redump - ", NULL };
+   static const char *words[] = {
+      "content", "tapes", "(beta)", "hack", "cursor", "pointer",
+      "setting", "non game", NULL };
+   size_t i;
+   for (i = 0; prefixes[i]; i++)
+      if (pix16_has_icase(n, prefixes[i]) && !strncmp(n, prefixes[i],
+               strlen(prefixes[i])))
+         return true;
+   for (i = 0; words[i]; i++)
+      if (pix16_has_icase(n, words[i]))
+         return true;
+   return false;
+}
+
+static void pix16_icon_scan(void)
+{
+   struct string_list *list;
+   settings_t *settings = config_get_ptr();
+   char dir[PATH_MAX_LENGTH];
+   size_t i;
+
+   if (pix16_icon_scanned)
+      return;
+   pix16_icon_scanned = true;
+   if (!settings || string_is_empty(settings->paths.directory_assets))
+      return;
+   fill_pathname_join_special(dir, settings->paths.directory_assets,
+         "xmb" PATH_DEFAULT_SLASH() "dot-art" PATH_DEFAULT_SLASH() "png",
+         sizeof(dir));
+   list = dir_list_new(dir, "png", false, false, false, false);
+   if (!list)
+      return;
+   dir_list_sort(list, true);
+   for (i = 0; i < list->size && pix16_icon_all_n < PIX16_ICON_MAX; i++)
+   {
+      const char *path = list->elems[i].data;
+      char base[64];
+      if (!path)
+         continue;
+      strlcpy(base, path_basename(path), sizeof(base));
+      path_remove_extension(base);
+      if (!base[0])
+         continue;
+      if (pix16_icon_skip(base))
+         continue;
+      /* keep "Maker - System" names only, not loose one-off entries */
+      if (!strstr(base, " - "))
+         continue;
+      strlcpy(pix16_icon_all[pix16_icon_all_n], base, sizeof(pix16_icon_all[0]));
+      pix16_icon_all_n++;
+   }
+   string_list_free(list);
+}
+
+/* rows and labels for whatever the picker is showing */
+static size_t pix16_mg_pick_count(pix16_t *pix)
+{
+   if (pix->mg_icon_more)
+   {
+      pix16_icon_scan();
+      return pix16_icon_all_n;
+   }
+   if (pix->mg_icon)
+      return pix->mg_n + 1;              /* the popular list and MORE... */
+   return pix->mg_n;
+}
+
+static const char *pix16_mg_pick_text(pix16_t *pix, size_t row)
+{
+   if (pix->mg_icon_more)
+      return row < pix16_icon_all_n ? pix16_icon_all[row] : "";
+   if (pix->mg_icon)
+      return row == 0 ? "MORE..." : pix->mg_label[row - 1];
+   return pix->mg_label[row];
+}
+
+/* Drop a system's line from pix16_groups.txt (its tile returns) */
+static void pix16_groups_clear(const char *member)
+{
+   size_t i;
+   if (!pix16_groups || !member || !member[0])
+      return;
+   for (i = 0; i < pix16_groups_n; i++)
+   {
+      if (!string_is_equal_noncase(pix16_groups[i].member, member))
+         continue;
+      memmove(&pix16_groups[i], &pix16_groups[i + 1],
+            (pix16_groups_n - i - 1) * sizeof(pix16_groups[0]));
+      pix16_groups_n--;
+      pix16_groups_save();
+      return;
+   }
+}
+
+/* How many systems sit inside this one (0 means it is nobody's host) */
+static size_t pix16_groups_member_count(const char *host)
+{
+   size_t i, n = 0;
+   if (!pix16_groups || !host || !host[0])
+      return 0;
+   for (i = 0; i < pix16_groups_n; i++)
+      if (     string_is_equal_noncase(pix16_groups[i].host, host)
+            && !string_is_equal_noncase(pix16_groups[i].host, "HOME")
+            && !string_is_equal_noncase(pix16_groups[i].host, "ARCADE")
+            && !string_is_equal_noncase(pix16_groups[i].host, "HIDDEN"))
+         n++;
+   return n;
+}
+
+/* A system the manage window hid: its tile stays off the grid */
+static bool pix16_is_hidden(const char *path)
+{
+   const char *host = pix16_group_host_of(path);
+   return host && string_is_equal_noncase(host, "HIDDEN");
+}
+
 static const char *pix16_group_host_of(const char *path)
 {
    char base[NAME_MAX_LENGTH];
@@ -2436,6 +2912,148 @@ static size_t pix16_picker_items(const pix16_t *pix, size_t *idx, size_t max)
    return n;
 }
 
+/* Optional order: pix16_order.txt next to pix16_groups.txt, one playlist
+ * name per line. Applied once per grid build, never in the sort. */
+#define PIX16_ORDER_MAX 64
+static char pix16_order[PIX16_ORDER_MAX][NAME_MAX_LENGTH];
+static size_t pix16_order_n;
+static bool pix16_order_tried;
+
+static char *pix16_order_file(void)
+{
+   settings_t *settings = config_get_ptr();
+   const char *cfg      = path_get(RARCH_PATH_CONFIG);
+   char *path           = (char*)malloc(2 * PATH_MAX_LENGTH);
+   char *dir;
+
+   if (!path)
+      return NULL;
+   dir = path + PATH_MAX_LENGTH;
+   if (settings && !string_is_empty(settings->paths.directory_menu_config))
+      strlcpy(dir, settings->paths.directory_menu_config, PATH_MAX_LENGTH);
+   else if (!string_is_empty(cfg))
+      fill_pathname_basedir(dir, cfg, PATH_MAX_LENGTH);
+   else
+   {
+      free(path);
+      return NULL;
+   }
+   fill_pathname_join_special(path, dir, "pix16_order.txt", PATH_MAX_LENGTH);
+   return path;
+}
+
+static void pix16_order_base(const char *path, char *out, size_t len)
+{
+   const char *b = path ? path_basename(path) : NULL;
+   out[0] = '\0';
+   if (!b)
+      return;
+   strlcpy(out, b, len);
+   path_remove_extension(out);
+}
+
+static void pix16_order_load(void)
+{
+   char line[NAME_MAX_LENGTH];
+   char *path;
+   RFILE *f = NULL;
+
+   pix16_order_tried = true;
+   pix16_order_n     = 0;
+   path              = pix16_order_file();
+   if (path && path_is_valid(path))
+      f = filestream_open(path, RETRO_VFS_FILE_ACCESS_READ,
+            RETRO_VFS_FILE_ACCESS_HINT_NONE);
+   free(path);
+   if (!f)
+      return;
+   while (pix16_order_n < PIX16_ORDER_MAX
+         && filestream_gets(f, line, sizeof(line)))
+   {
+      pix16_trim(line);
+      if (!line[0] || line[0] == '#')
+         continue;
+      strlcpy(pix16_order[pix16_order_n], line, sizeof(pix16_order[0]));
+      pix16_order_n++;
+   }
+   filestream_close(f);
+}
+
+static bool pix16_order_save(void)
+{
+   char *path = pix16_order_file();
+   RFILE *f;
+   size_t i;
+
+   if (!path)
+      return false;
+   f = filestream_open(path, RETRO_VFS_FILE_ACCESS_WRITE,
+         RETRO_VFS_FILE_ACCESS_HINT_NONE);
+   free(path);
+   if (!f)
+      return false;
+   filestream_printf(f, "# pix16: the order of the systems screen.\n");
+   for (i = 0; i < pix16_order_n; i++)
+      filestream_printf(f, "%s\n", pix16_order[i]);
+   filestream_close(f);
+   return true;
+}
+
+/* One pass over the built grid: named systems first, in file order */
+static void pix16_order_apply(pix16_t *pix)
+{
+   file_list_t *list;
+   size_t *tmp;
+   size_t i, k, w = 0;
+
+   if (!pix16_order_tried)
+      pix16_order_load();
+   if (!pix16_order_n || pix->grid_count < 2)
+      return;
+   list = pix16_selection_buf();
+   if (!list)
+      return;
+   tmp = (size_t*)malloc(pix->grid_count * sizeof(size_t));
+   if (!tmp)
+      return;
+
+   for (k = 0; k < pix16_order_n; k++)
+      for (i = 0; i < pix->grid_count; i++)
+      {
+         char base[NAME_MAX_LENGTH];
+         pix16_order_base(list->list[pix->grid_map[i]].path, base,
+               sizeof(base));
+         if (string_is_equal_noncase(base, pix16_order[k]))
+         {
+            size_t j;
+            bool done = false;
+            for (j = 0; j < w; j++)
+               if (tmp[j] == pix->grid_map[i])
+               {
+                  done = true;
+                  break;
+               }
+            if (!done)
+               tmp[w++] = pix->grid_map[i];
+         }
+      }
+   for (i = 0; i < pix->grid_count; i++)
+   {
+      size_t j;
+      bool done = false;
+      for (j = 0; j < w; j++)
+         if (tmp[j] == pix->grid_map[i])
+         {
+            done = true;
+            break;
+         }
+      if (!done)
+         tmp[w++] = pix->grid_map[i];
+   }
+   memcpy(pix->grid_map, tmp, pix->grid_count * sizeof(size_t));
+   free(tmp);
+}
+
 static void pix16_grid_sort(pix16_t *pix);
 static bool pix16_is_grid_view(void);
 
@@ -2456,6 +3074,29 @@ static bool pix16_has_subs(const pix16_t *pix, size_t host)
       if (pix->sub_host[k] == host)
          return true;
    return false;
+}
+
+/* List index of the playlist whose name matches this system, or
+ * PIX16_TOP_NONE */
+static size_t pix16_playlist_index(const pix16_t *pix, const char *name)
+{
+   file_list_t *list = pix16_selection_buf();
+   size_t i;
+   if (!list)
+      return PIX16_TOP_NONE;
+   for (i = 0; i < list->size; i++)
+   {
+      char base[NAME_MAX_LENGTH];
+      if (     list->list[i].type != FILE_TYPE_PLAYLIST_COLLECTION
+            || !list->list[i].path)
+         continue;
+      strlcpy(base, path_basename(list->list[i].path), sizeof(base));
+      path_remove_extension(base);
+      pix16_canon_name(base, sizeof(base));
+      if (string_is_equal_noncase(base, name))
+         return i;
+   }
+   return PIX16_TOP_NONE;
 }
 
 static void pix16_grid_build(pix16_t *pix)
@@ -2509,7 +3150,8 @@ static void pix16_grid_build(pix16_t *pix)
          continue;
       host = pix16_group_host_of(list->list[i].path);
       if (     !host || string_is_equal_noncase(host, "HOME")
-            || string_is_equal_noncase(host, "ARCADE"))
+            || string_is_equal_noncase(host, "ARCADE")
+            || string_is_equal_noncase(host, "HIDDEN"))
          continue;
       for (j = 0; j < n; j++)
       {
@@ -2534,15 +3176,46 @@ static void pix16_grid_build(pix16_t *pix)
          break;
       }
    }
+   /* ARCADE: two or more arcade playlists share one tile; the first in
+    * list order stands in for the group */
    pix->arcade_rep = PIX16_TOP_NONE;
+   for (i = 0; i < n; i++)
+   {
+      if (list->list[i].type != FILE_TYPE_PLAYLIST_COLLECTION)
+         continue;
+      if (pix16_sub_host(pix, i) != PIX16_TOP_NONE)
+         continue;
+      if (pix16_is_arcade_playlist(list->list[i].path))
+         pix->arcade_idx[pix->arcade_count++] = i;
+   }
+   if (pix->arcade_count >= 2)
+      pix->arcade_rep = pix->arcade_idx[0];
+   else
+      pix->arcade_count = 0;
+
+   /* PC Engine + PC Engine CD share one tile when both are there */
+   pix->pce_cart = pix16_playlist_index(pix,
+         "NEC - PC Engine - TurboGrafx 16");
+   pix->pce_cd   = pix16_playlist_index(pix,
+         "NEC - PC Engine CD - TurboGrafx-CD");
+   if (pix->pce_cart == PIX16_TOP_NONE || pix->pce_cd == PIX16_TOP_NONE)
+      pix->pce_cart = pix->pce_cd = PIX16_TOP_NONE;
 
    for (i = 0; i < n; i++)
    {
       const char *label = list->list[i].label;
       if (list->list[i].type == FILE_TYPE_PLAYLIST_COLLECTION)
       {
-         if (pix16_sub_host(pix, i) != PIX16_TOP_NONE)
+         if (pix16_is_hidden(list->list[i].path))
+            ;  /* hidden by the manage window */
+         else if (pix16_sub_host(pix, i) != PIX16_TOP_NONE)
             ;  /* shown inside its host's tile */
+         else if (     pix->arcade_rep != PIX16_TOP_NONE
+                    && i != pix->arcade_rep
+                    && pix16_is_arcade_playlist(list->list[i].path))
+            ;  /* shown inside the ARCADE tile */
+         else if (pix16_pce_grouped(pix) && i == pix->pce_cd)
+            ;  /* shown inside the PC Engine tile */
          else
             pix->grid_map[pix->grid_count++] = i;
       }
@@ -2578,6 +3251,7 @@ static void pix16_grid_build(pix16_t *pix)
    }
 
    pix16_grid_sort(pix);
+   pix16_order_apply(pix);
 }
 
 /* Position of a playlist in the systems table (grid order), or -1 */
@@ -2826,6 +3500,12 @@ static int pix16_grid_scroll(pix16_t *pix, size_t page)
       pix->grid_start   = now - (retro_time_t)PIX16_PAGE_MS * 1000;
       return target;
    }
+   else if (pix->reduced_motion)
+   {
+      pix->grid_from_px = pix->grid_to_px = target;
+      pix->grid_start   = now - (retro_time_t)PIX16_PAGE_MS * 1000;
+      return target;
+   }
    else
    {
       float t = (float)(now - pix->grid_start) / (PIX16_PAGE_MS * 1000.0f);
@@ -2929,7 +3609,15 @@ static void pix16_grid_layout(pix16_t *pix, int avail_w, int avail_h,
       best_last = best_c;
       best_th   = (avail_h - (maxr - 1) * PIX16_TILE_VGAP) / maxr;
       if (best_th < PIX16_TILE_MIN_H)
+      {
+         /* the minimum tile is taller than the space allows with this many
+          * rows: drop rows until a page really fits, or the last row and the
+          * page dots spill off the bottom */
          best_th = PIX16_TILE_MIN_H;
+         while (     best_r > 1
+               &&  best_r * best_th + (best_r - 1) * PIX16_TILE_VGAP > avail_h)
+            best_r--;
+      }
    }
 
    {
@@ -2959,6 +3647,54 @@ static void pix16_grid_layout(pix16_t *pix, int avail_w, int avail_h,
             + PIX16_GLYPH_H);
       pix->grid_valid  = false;   /* the page strip changed width */
    }
+}
+
+/* How many tiles a row of a page holds: the last row is drawn with wider
+ * tiles and often fewer of them */
+static size_t pix16_grid_row_count(size_t page, size_t row, size_t cnt)
+{
+   size_t per   = PIX16_GRID_PER_PAGE;
+   size_t on    = cnt > page * per ? cnt - page * per : 0;
+   size_t above = row * PIX16_GRID_COLS;
+   size_t left  = on > above ? on - above : 0;
+   if (row == (size_t)PIX16_GRID_ROWS - 1 && left > (size_t)pix16_grid_last)
+      left = (size_t)pix16_grid_last;
+   if (left > (size_t)PIX16_GRID_COLS)
+      left = PIX16_GRID_COLS;
+   return left;
+}
+
+/* The tile of that row lying under the given one: widest overlap first,
+ * then nearest centre */
+static size_t pix16_grid_col_for(size_t row, size_t count,
+      size_t in, size_t cur_row)
+{
+   int tw_c    = PIX16_TILE_W_AT((int)cur_row);
+   int tw_t    = PIX16_TILE_W_AT((int)row);
+   int cx0     = (int)(in % PIX16_GRID_COLS) * (tw_c + PIX16_TILE_GAP_X);
+   int cx1     = cx0 + tw_c;
+   int ccen    = (cx0 + cx1) / 2;
+   int best_ov = -1;
+   int best_d  = 0x7fffffff;
+   size_t best = 0;
+   size_t k;
+
+   for (k = 0; k < count; k++)
+   {
+      int tx0 = (int)k * (tw_t + PIX16_TILE_GAP_X);
+      int tx1 = tx0 + tw_t;
+      int ov  = (cx1 < tx1 ? cx1 : tx1) - (cx0 > tx0 ? cx0 : tx0);
+      int d   = (tx0 + tx1) / 2 - ccen;
+      if (d < 0)
+         d = -d;
+      if (ov > best_ov || (ov == best_ov && d < best_d))
+      {
+         best    = k;
+         best_ov = ov;
+         best_d  = d;
+      }
+   }
+   return best;
 }
 
 /* The systems grid, either theme: pages of tiles laid side by side,
@@ -3158,6 +3894,17 @@ static void pix16_plus_icon(pix16_t *pix, int x, int y, uint16_t color)
 
 /* HISTORY / FAVORITES buttons across the top of the systems screen,
  * the power button at the left end and the options gear at the right */
+/* Two arrows, up and down: the arrange button */
+static void pix16_order_icon(pix16_t *pix, int x, int y, uint16_t color)
+{
+   int i;
+   for (i = 0; i < 4; i++)
+   {
+      pix16_fill(pix, x + 3 - i, y + i, 1 + 2 * i, 1, color);
+      pix16_fill(pix, x + 3 - i, y + 10 - i, 1 + 2 * i, 1, color);
+   }
+}
+
 static void pix16_draw_top_bar(pix16_t *pix, int x, int y, int w, int h,
       bool jrpg)
 {
@@ -3257,6 +4004,37 @@ static void pix16_draw_top_bar(pix16_t *pix, int x, int y, int w, int h,
       w -= gear_w + gap;
    }
 
+   /* the order (arrange) button, left of the + */
+   {
+      int ox = gx - 2 * (gap + gear_w);
+      if (jrpg)
+      {
+         pix16_j_tile(pix, ox, y, gear_w, h, pix->order_focus);
+         pix->text_shadow = true;
+         pix16_order_icon(pix, ox + (gear_w - 7) / 2, y + (h - 11) / 2,
+               pix->order_focus ? pix->colors[PIX16_C_J_GOLD]
+                                : pix->colors[PIX16_C_J_TEXT]);
+         pix->text_shadow = false;
+         if (pix->order_focus)
+         {
+            pix->sys_glove_on = true;
+            pix->sys_glove_x  = ox - 9;
+            pix->sys_glove_y  = y + (h - 9) / 2;
+         }
+      }
+      else
+      {
+         if (pix->order_focus)
+            pix16_fill(pix, ox - 1, y - 1, gear_w + 2, h + 2, pix->colors[PIX16_C_TEXT]);
+         pix16_panel(pix, ox, y, gear_w, h,
+               pix->order_focus ? pix->tab_color[PIX16_TAB_SETUP]
+                                : pix->colors[PIX16_C_PANEL]);
+         pix16_order_icon(pix, ox + (gear_w - 7) / 2, y + (h - 11) / 2,
+               pix->order_focus ? pix->colors[PIX16_C_DARK_TEXT]
+                                : pix->colors[PIX16_C_TEXT_DIM]);
+      }
+      w -= gear_w + gap;
+   }
    for (k = 0; k < 2; k++)
       if (pix->top_idx[k] != PIX16_TOP_NONE)
          shown[n++] = k;
@@ -3303,6 +4081,455 @@ static void pix16_draw_top_bar(pix16_t *pix, int x, int y, int w, int h,
 static void pix16_draw_game_menu(pix16_t *pix, bool jrpg);
 
 static bool pix16_popup_window(pix16_t *pix, int x, int y, int w, int h);
+
+/* The manage actions that apply to the picked system, in draw order */
+enum { PIX16_MG_MERGE = 0, PIX16_MG_UNMERGE, PIX16_MG_RENAME,
+       PIX16_MG_ICON, PIX16_MG_HIDE, PIX16_MG_BACK };
+
+static size_t pix16_mg_rows(pix16_t *pix, int *act)
+{
+   size_t n = 0;
+   const char *host = pix16_group_host_of(pix->mg_member);
+   bool hidden   = host && string_is_equal_noncase(host, "HIDDEN");
+   bool merged   = host && !string_is_equal_noncase(host, "HOME")
+                && !string_is_equal_noncase(host, "ARCADE") && !hidden;
+   act[n++] = PIX16_MG_MERGE;
+   if (merged || hidden || pix16_groups_member_count(pix->mg_member) > 0)
+      act[n++] = PIX16_MG_UNMERGE;
+   act[n++] = PIX16_MG_RENAME;
+   act[n++] = PIX16_MG_ICON;
+   if (!hidden)
+      act[n++] = PIX16_MG_HIDE;
+   act[n++] = PIX16_MG_BACK;
+   return n;
+}
+
+/* Every playlist, tiles and members alike, so merged and hidden systems
+ * can be seen and acted on from the arrange window */
+static void pix16_order_fill(pix16_t *pix)
+{
+   file_list_t *list = pix16_selection_buf();
+   size_t i;
+   pix->order_n = 0;
+   if (!list)
+      return;
+   for (i = 0; i < list->size && pix->order_n < 64; i++)
+   {
+      const char *lbl;
+      const char *host;
+      if (list->list[i].type != FILE_TYPE_PLAYLIST_COLLECTION
+            || !list->list[i].path)
+         continue;
+      pix16_get_entry(pix, i, false);
+      lbl = pix16_entry_label(&pix->entry);
+      host = pix16_group_host_of(list->list[i].path);
+      pix->order_map[pix->order_n] = i;
+      pix->order_state[pix->order_n] =
+           (host && string_is_equal_noncase(host, "HIDDEN")) ? 2
+         : (host && !string_is_equal_noncase(host, "HOME")
+               && !string_is_equal_noncase(host, "ARCADE")) ? 1
+         : 0;
+      strlcpy(pix->order_label[pix->order_n], lbl ? lbl : "",
+            sizeof(pix->order_label[0]));
+      pix->order_n++;
+   }
+}
+
+/* What the second row says: a hidden system comes back, a member splits
+ * out, a host splits everything it holds */
+static const char *pix16_mg_label(const pix16_t *pix, int act)
+{
+   if (act == PIX16_MG_MERGE)
+      return "MERGE INTO...";
+   if (act == PIX16_MG_HIDE)
+      return "HIDE SYSTEM";
+   if (act == PIX16_MG_RENAME)
+      return "RENAME...";
+   if (act == PIX16_MG_ICON)
+      return "CHANGE ICON...";
+   if (act == PIX16_MG_UNMERGE)
+   {
+      const char *host = pix16_group_host_of(pix->mg_member);
+      if (host && string_is_equal_noncase(host, "HIDDEN"))
+         return "SHOW SYSTEM";
+      if (pix16_groups_member_count(pix->mg_member) > 0)
+         return "SPLIT ALL";
+      return "UNMERGE";
+   }
+   return "BACK";
+}
+
+static void pix16_mg_open(pix16_t *pix)
+{
+   file_list_t *list = pix16_selection_buf();
+   size_t idx;
+   if (!list || (size_t)pix->order_sel >= pix->order_n)
+      return;
+   idx = pix->order_map[pix->order_sel];
+   if (idx >= list->size || !list->list[idx].path)
+      return;
+   pix16_order_base(list->list[idx].path, pix->mg_member, sizeof(pix->mg_member));
+   strlcpy(pix->mg_name, pix->order_label[pix->order_sel], sizeof(pix->mg_name));
+   pix->mg_sel  = 0;
+   pix->mg_pick = false;
+   pix->mg_open = true;
+   pix16_sfx(PIX16_SFX_OK);
+}
+
+/* merge targets: every other system on the grid */
+static void pix16_mg_fill(pix16_t *pix)
+{
+   size_t k;
+   pix->mg_n = 0;
+   for (k = 0; k < pix->order_n && pix->mg_n < 64; k++)
+   {
+      if ((int)k == pix->order_sel)
+         continue;
+      pix->mg_map[pix->mg_n] = pix->order_map[k];
+      strlcpy(pix->mg_label[pix->mg_n], pix->order_label[k],
+            sizeof(pix->mg_label[0]));
+      pix->mg_n++;
+   }
+}
+
+/* rebuild the open order window's rows after an edit */
+static void pix16_order_refresh(pix16_t *pix)
+{
+   if (!pix->order_open)
+      return;
+   pix16_order_fill(pix);
+   if (pix->order_n && (size_t)pix->order_sel >= pix->order_n)
+      pix->order_sel = (int)pix->order_n - 1;
+}
+
+static void pix16_mg_apply(pix16_t *pix, int action)
+{
+   file_list_t *list = pix16_selection_buf();
+   switch (action)
+   {
+      case PIX16_MG_MERGE:
+         pix16_mg_fill(pix);
+         if (pix->mg_n)
+         {
+            pix->mg_pick = true;
+            pix->mg_sel  = 0;
+         }
+         break;
+      case PIX16_MG_UNMERGE:
+         {
+            size_t i;
+            bool split = false;
+            for (i = 0; list && i < list->size; i++)
+            {
+               char base[NAME_MAX_LENGTH];
+               const char *h;
+               if (list->list[i].type != FILE_TYPE_PLAYLIST_COLLECTION
+                     || !list->list[i].path)
+                  continue;
+               h = pix16_group_host_of(list->list[i].path);
+               if (!h || !string_is_equal_noncase(h, pix->mg_member))
+                  continue;
+               pix16_order_base(list->list[i].path, base, sizeof(base));
+               pix16_groups_clear(base);
+               split = true;
+            }
+            if (!split)
+               pix16_groups_clear(pix->mg_member);
+            /* the order window stays open: rebuild its rows so a system
+             * that just came back loses its [H] and its dim colour */
+            pix16_order_refresh(pix);
+            pix->mg_open = false;
+            menu_state_get_ptr()->flags |= MENU_ST_FLAG_ENTRIES_NEED_REFRESH;
+            pix16_sfx(PIX16_SFX_BACK);
+         }
+         break;
+      case PIX16_MG_RENAME:
+         {
+            menu_input_ctx_line_t line;
+            memset(&line, 0, sizeof(line));
+            line.label         = "SYSTEM NAME";
+            line.label_setting = "pix16_system_name";
+            line.text_type     = MENU_INPUT_DIALOG_KB_TYPE_TEXT;
+            line.cb            = pix16_mg_kb_cb;
+            pix16_mg_owner     = pix;
+            menu_input_dialog_start(&line);
+         }
+         break;
+      case PIX16_MG_ICON:
+         {
+            size_t k;
+            pix->mg_n = 0;
+            for (k = 0; pix16_systems[k].playlist && pix->mg_n < 64; k++)
+            {
+               strlcpy(pix->mg_label[pix->mg_n], pix16_systems[k].short_name,
+                     sizeof(pix->mg_label[0]));
+               pix->mg_map[pix->mg_n] = k;
+               pix->mg_n++;
+            }
+            if (pix->mg_n)
+            {
+               pix->mg_pick      = true;
+               pix->mg_icon      = true;
+               pix->mg_icon_more = false;
+               pix->mg_icon_cat  = -1;
+               pix->mg_sel       = 0;
+            }
+         }
+         break;
+      case PIX16_MG_HIDE:
+         pix16_groups_set(pix->mg_member, "HIDDEN");
+         pix->mg_open = false;
+         pix16_order_refresh(pix);
+         menu_state_get_ptr()->flags |= MENU_ST_FLAG_ENTRIES_NEED_REFRESH;
+         pix16_sfx(PIX16_SFX_OK);
+         break;
+      default:
+         pix->mg_open = false;
+         pix->mg_pick = false;
+         pix16_sfx(PIX16_SFX_BACK);
+         break;
+   }
+}
+
+static void pix16_mg_pick_apply(pix16_t *pix, size_t row)
+{
+   file_list_t *list = pix16_selection_buf();
+   size_t idx;
+   char target[NAME_MAX_LENGTH];
+
+   /* MORE... on the popular list: show the categories */
+   if (pix->mg_icon && !pix->mg_icon_more && pix->mg_icon_cat < 0
+         && row == 0)
+   {
+      pix->mg_icon_more = true;
+      pix->mg_sel       = 0;
+      return;
+   }
+   /* an icon out of the full list */
+   if (pix->mg_icon_more)
+   {
+      const char *nm = row < pix16_icon_all_n ? pix16_icon_all[row] : NULL;
+      if (nm && nm[0])
+         pix16_ovr_set(pix16_icons, &pix16_icons_n, "pix16_icons.txt",
+               pix->mg_member, nm);
+      pix->mg_open      = false;
+      pix->mg_pick      = false;
+      pix->mg_icon      = false;
+      pix->mg_icon_more = false;
+      pix->mg_icon_cat  = -1;
+      pix16_order_refresh(pix);
+      menu_state_get_ptr()->flags |= MENU_ST_FLAG_ENTRIES_NEED_REFRESH;
+      pix16_sfx(PIX16_SFX_OK);
+      return;
+   }
+
+   if (pix->mg_icon)
+   {
+      /* the popular list maps to system table entries, not to playlists,
+       * so it cannot go through the merge path below */
+      if (row == 0)
+         return;                          /* MORE... is not an icon */
+      row--;
+      if (row >= pix->mg_n)
+         return;
+      pix16_ovr_set(pix16_icons, &pix16_icons_n, "pix16_icons.txt",
+            pix->mg_member, pix16_systems[pix->mg_map[row]].playlist);
+   }
+   else
+   {
+      if (row >= pix->mg_n || !list)
+         return;
+      idx = pix->mg_map[row];
+      if (idx >= list->size || !list->list[idx].path)
+         return;
+      pix16_order_base(list->list[idx].path, target, sizeof(target));
+      pix16_groups_set(pix->mg_member, target);
+   }
+   pix->mg_open    = false;
+   pix->mg_pick    = false;
+   pix->mg_icon    = false;
+   pix16_order_refresh(pix);
+   menu_state_get_ptr()->flags |= MENU_ST_FLAG_ENTRIES_NEED_REFRESH;
+   pix16_sfx(PIX16_SFX_OK);
+}
+
+static void pix16_mg_input(pix16_t *pix, enum menu_action action)
+{
+   if (pix->mg_pick)
+   {
+      switch (action)
+      {
+         case MENU_ACTION_UP:
+            if (pix->mg_sel > 0) { pix->mg_sel--; pix16_sfx(PIX16_SFX_UP); }
+            break;
+         case MENU_ACTION_DOWN:
+            if ((size_t)(pix->mg_sel + 1) < pix16_mg_pick_count(pix))
+            { pix->mg_sel++; pix16_sfx(PIX16_SFX_DOWN); }
+            break;
+         case MENU_ACTION_OK:
+         case MENU_ACTION_START:
+            pix16_mg_pick_apply(pix, (size_t)pix->mg_sel);
+            break;
+         case MENU_ACTION_CANCEL:
+            pix->mg_pick = false;
+            pix->mg_sel  = 0;
+            pix16_sfx(PIX16_SFX_BACK);
+            break;
+         default:
+            break;
+      }
+   }
+   else
+   {
+      int acts[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+      size_t n = pix16_mg_rows(pix, acts);
+      switch (action)
+      {
+         case MENU_ACTION_UP:
+            if (pix->mg_sel > 0) { pix->mg_sel--; pix16_sfx(PIX16_SFX_UP); }
+            break;
+         case MENU_ACTION_DOWN:
+            if ((size_t)(pix->mg_sel + 1) < n) { pix->mg_sel++; pix16_sfx(PIX16_SFX_DOWN); }
+            break;
+         case MENU_ACTION_OK:
+         case MENU_ACTION_START:
+            pix16_mg_apply(pix, acts[pix->mg_sel]);
+            break;
+         case MENU_ACTION_CANCEL:
+            pix->mg_open = false;
+            pix16_sfx(PIX16_SFX_BACK);
+            break;
+         default:
+            break;
+      }
+   }
+   pix->flags |= PIX16_FLAG_FORCE_REDRAW;
+}
+
+/* Actions for one system: merge it into another tile, split it out,
+ * or hide it from the grid. Merging works like ARCADE: one tile that
+ * opens a picker of the systems inside it. */
+static void pix16_draw_manage(pix16_t *pix, bool jrpg)
+{
+   int w = PIX16_FB_WIDTH - 2 * PIX16_SAFE - 40, row_h = 14, h, x, y, i;
+   uint16_t fg  = jrpg ? pix->colors[PIX16_C_J_TEXT] : pix->colors[PIX16_C_TEXT];
+   uint16_t sel = jrpg ? pix->colors[PIX16_C_J_GOLD] : pix->colors[PIX16_C_YELLOW];
+   int acts[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+   int max_rows = (PIX16_FB_HEIGHT - 2 * PIX16_SAFE - 34) / 14;
+   int rows;
+   int first = 0;
+   size_t n;
+   const char *title;
+
+   if (pix->mg_pick)
+   {
+      n     = pix16_mg_pick_count(pix);
+      title = pix->mg_icon
+            ? (pix->mg_icon_cat >= 0
+                  ? (pix->mg_icon_cat == PIX16_CAT_CONSOLE  ? "CONSOLES"
+                  :  pix->mg_icon_cat == PIX16_CAT_HANDHELD ? "HANDHELDS"
+                  :  pix->mg_icon_cat == PIX16_CAT_COMPUTER ? "COMPUTERS"
+                  :                                           "MISC")
+                  : "CHANGE ICON")
+            : "MERGE INTO";
+   }
+   else
+   {
+      n = pix16_mg_rows(pix, acts);
+      title = pix->mg_name;
+   }
+
+   rows = (int)n > max_rows ? max_rows : (int)n;
+   if (pix->mg_sel >= rows)
+      first = pix->mg_sel - rows + 1;
+   h = 34 + rows * row_h;
+   x = PIX16_SAFE + (PIX16_FB_WIDTH - 2 * PIX16_SAFE - w) / 2;
+   y = PIX16_SAFE + (PIX16_FB_HEIGHT - 2 * PIX16_SAFE - h) / 2;
+   pix16_window(pix, x, y, w, h);
+   pix->text_shadow = jrpg;
+   pix16_text(pix, x + 8, y + 6, title, sel, 1, (size_t)((w - 16) / PIX16_GLYPH_W));
+   for (i = 0; i < rows; i++)
+   {
+      int row = first + i;
+      const char *label = pix->mg_pick ? pix16_mg_pick_text(pix, row)
+                                       : pix16_mg_label(pix, acts[row]);
+      int ry = y + 20 + i * row_h;
+      if (row == pix->mg_sel)
+         pix16_vgradient(pix, x + 6, ry - 1, w - 12, row_h, pix->sel_top, pix->sel_bot);
+      pix16_text(pix, x + 10, ry + 1, label,
+            row == pix->mg_sel ? pix->colors[PIX16_C_TEXT] : fg, 1,
+            (size_t)((w - 22) / PIX16_GLYPH_W));
+      if (row == pix->mg_sel)
+         pix16_glove_cursor(pix, x - 13, ry - 1);
+   }
+   pix->text_shadow = false;
+}
+
+/* System order window: the grid's systems as a list the user reorders */
+static void pix16_draw_order(pix16_t *pix, bool jrpg)
+{
+   int w        = PIX16_FB_WIDTH - 2 * PIX16_SAFE - 16;
+   int row_h    = 12;
+   int max_rows = (PIX16_FB_HEIGHT - 2 * PIX16_SAFE - 40) / 12;
+   int rows     = (int)pix->order_n;
+   int first    = 0;
+   int h, x, y, i;
+   uint16_t fg  = jrpg ? pix->colors[PIX16_C_J_TEXT] : pix->colors[PIX16_C_TEXT];
+   uint16_t sel = jrpg ? pix->colors[PIX16_C_J_GOLD] : pix->colors[PIX16_C_YELLOW];
+
+   if (rows > max_rows)
+      rows = max_rows;
+   if (pix->order_sel >= rows)
+      first = pix->order_sel - rows + 1;
+   h = 46 + rows * row_h;
+   x = PIX16_SAFE + (PIX16_FB_WIDTH - 2 * PIX16_SAFE - w) / 2;
+   y = PIX16_SAFE + (PIX16_FB_HEIGHT - 2 * PIX16_SAFE - h) / 2;
+
+   pix16_window(pix, x, y, w, h);
+   pix->text_shadow = jrpg;
+   pix16_text(pix, x + 8, y + 6, "SYSTEM ORDER", sel, 1, 0);
+   for (i = 0; i < rows; i++)
+   {
+      char marked[80];
+      const char *label = pix->order_label[first + i];
+      int ry = y + 20 + i * row_h;
+      if (pix->order_state[first + i] == 2)
+      {
+         snprintf(marked, sizeof(marked), "[H] %s", label);
+         label = marked;
+      }
+      if (first + i == pix->order_sel)
+         pix16_vgradient(pix, x + 6, ry - 1, w - 12, row_h, pix->sel_top, pix->sel_bot);
+      {
+         uint16_t col = fg;
+         if (pix->order_state[first + i] == 1)
+            col = pix->colors[PIX16_C_VALUE];
+         else if (pix->order_state[first + i] == 2)
+            col = pix->colors[PIX16_C_TEXT_DIM];
+         pix16_text(pix, x + 10, ry + 1, label, col, 1,
+               (size_t)((w - 22) / PIX16_GLYPH_W));
+      }
+      if (first + i == pix->order_sel && !pix->mg_open)
+         pix16_glove_cursor(pix, x - 13, ry - 1);   /* one glove at a time */
+   }
+   {
+      int hx = x + 8;
+      int hy = y + h - 26;
+      uint16_t pill_bg = pix->tab_color[PIX16_TAB_SETUP];
+      uint16_t pill_fg = pix->tab_fg[PIX16_TAB_SETUP];
+      pix16_text(pix, hx, hy + 2, "L/R MOVE    U/D PICK", fg, 1, 0);
+      hx  = x + 8;
+      hy += 13;
+      hx += pix16_okback(pix, hx, hy, true, jrpg) + 4;
+      pix16_text(pix, hx, hy + 2, "SAVE", fg, 1, 0);
+      hx += 4 * PIX16_GLYPH_W + 10;
+      hx += pix16_pill(pix, hx, hy, pix16_select_name(pix), pill_bg, pill_fg) + 4;
+      pix16_text(pix, hx, hy + 2, "ACTIONS", fg, 1, 0);
+   }
+   pix->text_shadow = false;
+   if (pix->mg_open)
+      pix16_draw_manage(pix, jrpg);
+}
 
 static void pix16_draw_arcade_picker(pix16_t *pix, bool jrpg)
 {
@@ -3436,6 +4663,7 @@ static void pix16_systems_screen(pix16_t *pix, bool jrpg)
    pix16_draw_top_bar(pix, x, PIX16_SAFE, w, bar_h, jrpg);
 
    /* nothing in the grid yet: say so instead of showing empty space */
+   pix->empty_show = false;
    if (pix->grid_count == 0 && !pix->wiz.open)
    {
       int bw = 208, bh = 56;
@@ -3445,18 +4673,26 @@ static void pix16_systems_screen(pix16_t *pix, bool jrpg)
       pix16_window(pix, bx, by, bw, bh);
       pix16_text(pix, bx + (bw - 14 * PIX16_GLYPH_W) / 2, by + 12,
             "NO SYSTEMS YET", pix->colors[PIX16_C_J_TEXT], 1, 0);
-      pix16_text(pix, bx + (bw - 13 * PIX16_GLYPH_W) / 2, by + 30,
-            "A  ADD SYSTEM", pix->colors[PIX16_C_J_GOLD], 1, 0);
+      pix16_text(pix, bx + (bw - 10 * PIX16_GLYPH_W) / 2, by + 30,
+            "ADD SYSTEM", pix->colors[PIX16_C_J_GOLD], 1, 0);
       pix->text_shadow = false;
+      pix->empty_rect.x = (int16_t)bx;
+      pix->empty_rect.y = (int16_t)by;
+      pix->empty_rect.w = (int16_t)bw;
+      pix->empty_rect.h = (int16_t)bh;
+      pix->empty_rect.kind = 0;
+      pix->empty_show    = true;
    }
 
    pix16_grid_pages(pix, x, grid_y, w, grid_h, jrpg);
 
-   if (pix->sys_glove_on && !pix->arcade_open && !pix->wiz.open)
+   if (pix->sys_glove_on && !pix->arcade_open && !pix->wiz.open && !pix->order_open)
       pix16_glove_at(pix, pix->sys_glove_x, pix->sys_glove_y,
             pix16_glove_context(pix, 1));
 
-   if (pix->arcade_open)
+   if (pix->order_open)
+      pix16_draw_order(pix, jrpg);
+   else if (pix->arcade_open)
       pix16_draw_arcade_picker(pix, jrpg);
    else if (pix->wiz.open)
       pix16_draw_wizard(pix, jrpg);
@@ -3911,8 +5147,10 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
    file_list_t *list          = pix16_selection_buf();
    size_t selection           = menu_st->selection_ptr;
    size_t i, begin, rows, count;
-   int row_y, glove_y = 0;
+   int row_y0, row_y;
+   int glove_x = 0, glove_y = 0;
    bool has_glove             = false;
+   bool show_glove;
    bool hearts                = false;
 
    pix16_window(pix, x, y, w, h);
@@ -3928,8 +5166,28 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
       return;
    }
 
-   begin = pix16_scroll(selection, count, rows);
-   row_y = y + 6 + ((h - 12) - (int)rows * PIX16_J_ROW_H) / 2;
+   begin      = pix16_scroll(selection, count, rows);
+   row_y0     = y + 6 + ((h - 12) - (int)rows * PIX16_J_ROW_H) / 2;
+   show_glove = !(pix->opt_back && pix16_stack_depth() == 1);
+
+   /* Selection bar. It rides with the glove, so the highlight and the
+    * finger move as one; drawn before the rows so their text stays on
+    * top of it. */
+   if (selection >= begin && selection < begin + rows)
+   {
+      int pad   = (PIX16_J_ROW_H - PIX16_GLYPH_H) / 2;
+      int ty    = row_y0 + (int)(selection - begin) * PIX16_J_ROW_H + pad;
+      int bar_y = ty - pad;
+      if (show_glove)
+      {
+         pix16_glove_update(pix, x + 7, ty - 1,
+               pix16_glove_context(pix, 2 + (unsigned)x), &glove_x, &glove_y);
+         bar_y     = glove_y + 1 - pad;
+         has_glove = true;
+      }
+      pix16_vgradient(pix, x + 6, bar_y, w - 12, PIX16_J_ROW_H,
+            pix->sel_top, pix->sel_bot);
+   }
 
    /* game lists get a heart column (not the Favorites list itself) */
    {
@@ -3943,7 +5201,8 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
          }
    }
 
-   for (i = begin; i < count && i < begin + rows; i++, row_y += PIX16_J_ROW_H)
+   for (i = begin, row_y = row_y0; i < count && i < begin + rows;
+         i++, row_y += PIX16_J_ROW_H)
    {
       bool selected    = (i == selection);
       const char *label, *value;
@@ -3956,16 +5215,6 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
       value = pix16_entry_value(&pix->entry);
       if (list->list[i].label && string_is_equal(list->list[i].label, PIX16_FAV_LABEL))
          value = NULL;   /* the toggle has no "..." */
-
-      if (selected)
-      {
-         glove_y   = ty - 1;
-         has_glove = true;
-         /* the row gets the tile's selection gradient, so a list reads
-          * as clearly as the grid does */
-         pix16_vgradient(pix, x + 6, row_y, w - 12, PIX16_J_ROW_H,
-               pix->sel_top, pix->sel_bot);
-      }
 
       if (!string_is_empty(value))
       {
@@ -3997,8 +5246,8 @@ static void pix16_j_list(pix16_t *pix, int x, int y, int w, int h)
       }
    }
 
-   if (has_glove && !(pix->opt_back && pix16_stack_depth() == 1))
-      pix16_glove_at(pix, x + 7, glove_y, pix16_glove_context(pix, 2 + (unsigned)x));
+   if (has_glove)
+      pix16_glove_cursor(pix, glove_x, glove_y);
 
    /* more above / below: little gold arrows on the frame */
    if (begin > 0)
@@ -4062,7 +5311,7 @@ static void pix16_j_grid_tile(pix16_t *pix, size_t list_idx, int tx,
    int bob = 0;
    pix16_tile_info(pix, list_idx, &t);
 
-   if (selected)
+   if (selected && !pix->reduced_motion)
    {
       /* the chosen console floats up and down a pixel */
       static const int8_t seq[6] = { 0, -1, -1, 0, 1, 1 };
@@ -4101,6 +5350,11 @@ static size_t pix16_guide_build(pix16_t *pix, pix16_guide_item_t *g)
    size_t n                   = 0;
 
 #define PIX16_G(k, l) do { g[n].key = (k); g[n].label = (l); n++; } while (0)
+   if (pix->order_focus || pix->order_open)
+   {
+      PIX16_G('A', "ORDER");
+      return n;
+   }
    if (pix->quit_confirm)
    {
       PIX16_G('A', msg_hash_to_str(MSG_PIX16_GUIDE_OK));
@@ -4273,6 +5527,8 @@ static void pix16_j_background(pix16_t *pix, int x0, int y0, int w, int h)
    uint16_t light = pix->bg_light;
    int off = (int)((menu_driver_get_current_time() / 1000 / 70) & 1023);
    int x, y;
+   if (pix->reduced_motion)
+      off = 0;                 /* the pattern does not drift */
    if (x0 < 0)
    {
       w += x0;
@@ -4354,7 +5610,7 @@ static bool pix16_popup_window(pix16_t *pix, int x, int y, int w, int h)
    pix->pop_rect.x = (int16_t)x; pix->pop_rect.y = (int16_t)y;
    pix->pop_rect.w = (int16_t)w; pix->pop_rect.h = (int16_t)h;
    pix->pop_rect.kind = PIX16_RECT_WIN;
-   if (t < 1.0f)
+   if (t < 1.0f && !pix->reduced_motion)
    {
       bool rec = pix->rec_on;
       pix->rec_on = false;
@@ -4396,6 +5652,11 @@ static void pix16_transition_overlay(pix16_t *pix, bool scrim)
 
    if (!pix->tr_active)
       return;
+   if (pix->reduced_motion)
+   {
+      pix->tr_active = false;
+      return;
+   }
    if (ms >= close_ms + PIX16_TR_OPEN_MS)
    {
       pix->tr_active = false;
@@ -5040,6 +6301,7 @@ static int pix16_boot_line_ms(pix16_t *pix, size_t i)
  * and RetroArch actually are. Gathered once per boot. */
 #define PIX16_INFO_ROWS 16
 #define PIX16_INFO_CHAR_MS 21   /* a little slower than the left column */
+#define PIX16_INFO_COLS 25      /* text columns in the specs panel */
 static char pix16_info[PIX16_INFO_ROWS][2][64];
 static int  pix16_info_n = -1;
 
@@ -5120,7 +6382,38 @@ static void pix16_info_build(void)
                memmove(f, f + strlen(drop[d]), strlen(f + strlen(drop[d])) + 1);
          }
       }
-      pix16_info_add("", model);
+      /* the model name gets lines of its own, without padding, wrapped
+       * to the width of the specs panel */
+      {
+         char *p = model;
+         while (*p)
+         {
+            char line[PIX16_INFO_COLS + 2];
+            size_t n;
+            while (*p == ' ')
+               p++;
+            if (!*p)
+               break;
+            n = strlen(p);
+            if (n > PIX16_INFO_COLS)
+            {
+               size_t cut = PIX16_INFO_COLS;
+               while (cut > 1 && p[cut] != ' ')
+                  cut--;
+               if (cut <= 1)
+                  cut = PIX16_INFO_COLS;
+               memcpy(line, p, cut);
+               line[cut] = '\0';
+               p += cut;
+            }
+            else
+            {
+               strlcpy(line, p, sizeof(line));
+               p += n;
+            }
+            pix16_info_add("", line);
+         }
+      }
    }
 
    {
@@ -5266,78 +6559,52 @@ static void pix16_draw_bios_panel(pix16_t *pix, int ms, int x, int y, int w,
    }
 }
 
-/* BIOS mascot: a pixel alien drawn as outlined blocks; its fringe
- * sways and it blinks. */
-#define PIX16_ALIEN_W 13
-#define PIX16_ALIEN_H 12
-static const char *pix16_alien[2][PIX16_ALIEN_H] = {
-   {
-      "......o......",
-      "......#......",
-      "....#####....",
-      "..#########..",
-      ".###########.",
-      ".##..###..##.",
-      ".##.e###.e##.",
-      "#############",
-      "#############",
-      "#.#.#.#.#.#.#",
-      "#.#.#.#.#.#.#",
-      ".#...#.#...#."
-   },
-   {
-      "......o......",
-      "......#......",
-      "....#####....",
-      "..#########..",
-      ".###########.",
-      ".##..###..##.",
-      ".##.e###.e##.",
-      "#############",
-      "#############",
-      ".#.#.#.#.#.#.",
-      ".#.#.#.#.#.#.",
-      "#...#...#...#"
-   }
+/* BIOS mascot: the RetroArch alien, a flat silhouette with antennae, a
+ * brow, square eyes, side pincers and four legs. It blinks and its
+ * antenna tips pulse. */
+#define PIX16_ALIEN_W 23
+#define PIX16_ALIEN_H 13
+static const char *pix16_alien[PIX16_ALIEN_H] = {
+   ".......#.......#.......",
+   ".......##.....##.......",
+   "##....###########....##",
+   ".#...#############...#.",
+   ".#..###ee#####ee###..#.",
+   "#######ee#####ee#######",
+   "#######################",
+   "#######################",
+   "...#################...",
+   "....###############....",
+   "....##..##...##..##....",
+   "...##...##....##...##..",
+   "..##...##......##...##."
 };
 
 static void pix16_draw_alien(pix16_t *pix, int x, int y, int bs, int ms)
 {
-   uint16_t edge  = pix->colors[PIX16_C_J_GOLD];
-   uint16_t fill  = pix->colors[PIX16_C_J_BORDER_LO];
-   uint16_t core  = pix->colors[PIX16_C_J_VALUE];
-   uint16_t hot   = pix->colors[PIX16_C_J_TEXT];
-   int frame      = (ms / 420) & 1;
-   bool blink     = (ms % 3400) < 140;
-   bool glint     = ((ms / 300) & 1) != 0;
+   uint16_t body = pix->colors[PIX16_C_J_BORDER_LO];
+   uint16_t brow = pix->colors[PIX16_C_J_BORDER];
+   uint16_t tip  = ((ms / 300) & 1) ? pix->colors[PIX16_C_J_TEXT]
+                                    : pix->colors[PIX16_C_J_GOLD];
+   uint16_t hole = pix->colors[PIX16_C_J_BG];
+   bool blink    = (ms % 3400) < 140;
    int r, c;
    for (r = 0; r < PIX16_ALIEN_H; r++)
       for (c = 0; c < PIX16_ALIEN_W; c++)
       {
-         char ch = pix16_alien[frame][r][c];
-         int bx  = x + c * bs, by = y + r * bs;
-         if (ch == '#')
-         {
-            /* outlined block: bright edge, dark inside, a lit centre */
-            pix16_fill(pix, bx, by, bs, bs, edge);
-            if (bs >= 4)
-            {
-               pix16_fill(pix, bx + 1, by + 1, bs - 2, bs - 2, fill);
-               if (bs >= 6)
-                  pix16_fill(pix, bx + bs / 2 - 1, by + bs / 2 - 1, 2, 2, core);
-            }
-         }
-         else if (ch == 'e')
-         {
-            /* pupils, in the holes of the eyes; shut when it blinks */
-            if (!blink)
-               pix16_fill(pix, bx + bs / 4, by - bs / 2, bs / 2 + 1, bs / 2 + 1, hot);
-         }
-         else if (ch == 'o')
-         {
-            /* antenna light, pulsing */
-            pix16_fill(pix, bx, by, bs, bs, glint ? hot : edge);
-         }
+         char ch = pix16_alien[r][c];
+         uint16_t col;
+         if (ch == '.')
+            continue;
+         if (ch == 'e')
+            col = blink ? body : hole;
+         else if (r == 0)
+            col = tip;              /* antenna tips */
+         else if (r == 2)
+            col = brow;             /* bevel along the brow */
+         else
+            col = body;
+         pix16_fill(pix, x + c * bs, y + r * bs, bs, bs, col);
       }
 }
 
@@ -5348,14 +6615,15 @@ static void pix16_draw_bios(pix16_t *pix, int ms)
    uint16_t dim   = pix->colors[PIX16_C_J_DIM];
    bool wide      = PIX16_FB_WIDTH > 320;
    int x = 20, y = wide ? 14 : 18, lh = wide ? 10 : 12;
+   int win_y = y - 8;
+   int win_h = 14 + (int)PIX16_BOOT_LINES * lh;
    int t = 0;
    size_t i;
 
    pix16_boot_count_step(pix);
    pix16_j_background(pix, 0, 0, PIX16_FB_WIDTH, PIX16_FB_HEIGHT);
    /* the readout sits in a window, like every other pix16 screen */
-   pix16_window(pix, x - 8, y - 8, 228,
-         14 + (int)PIX16_BOOT_LINES * lh);
+   pix16_window(pix, x - 8, win_y, 228, win_h);
    pix->text_shadow = true;
 
    for (i = 0; i < PIX16_BOOT_LINES; i++)
@@ -5410,16 +6678,25 @@ static void pix16_draw_bios(pix16_t *pix, int ms)
       y += lh;
    }
 
-   /* the mascot: under the text (widescreen) or in the top right
-    * corner (4:3), drawn in by a scanning beam, then it idles */
+   /* the mascot: along the bottom, below the readout window, drawn in
+    * by a scanning beam, then it idles */
    {
-      int bs  = wide ? 8 : 5;                 /* block size */
-      int lw  = PIX16_ALIEN_W * bs, lhh = PIX16_ALIEN_H * bs;
-      int lx  = wide ? 20 + (28 * PIX16_GLYPH_W - lw) / 2
-                     : PIX16_FB_WIDTH - 12 - lw;
-      int ly  = wide ? PIX16_FB_HEIGHT - 12 - lhh : 12;
-      int rev = ms < 900 ? lhh * ms / 900 : lhh;   /* rows revealed */
-      int cy1 = pix->clip_y1;
+      int wb  = win_y + win_h;                /* window bottom */
+      int bs  = wide ? 8 : 3;                 /* block size */
+      int lw, lhh, lx, ly, rev, cy1;
+      /* bottom-aligned; if the window leaves too little room, shrink it
+       * until the mascot clears the window and fits on screen */
+      while (bs > 2 && PIX16_FB_HEIGHT - 4 - PIX16_ALIEN_H * bs < wb + 4)
+         bs--;
+      lw  = PIX16_ALIEN_W * bs;
+      lhh = PIX16_ALIEN_H * bs;
+      lx  = wide ? 20 + (28 * PIX16_GLYPH_W - lw) / 2
+                 : PIX16_FB_WIDTH - 12 - lw;
+      ly  = PIX16_FB_HEIGHT - 4 - lhh;
+      if (ly < wb + 4)
+         ly = wb + 4;
+      rev = ms < 900 ? lhh * ms / 900 : lhh;   /* rows revealed */
+      cy1 = pix->clip_y1;
       if (rev > 0)
       {
          pix->clip_y1 = ly + rev < cy1 ? ly + rev : cy1;
@@ -5880,7 +7157,7 @@ static void pix16_tab_slide(pix16_t *pix)
    int off, x, y;
    uint16_t row[PIX16_FB_MAX_W];
 
-   if (t >= 1.0f)
+   if (t >= 1.0f || pix->reduced_motion)
    {
       pix->slide_active = false;
       return;
@@ -7012,9 +8289,9 @@ static void pix16_draw_wizard(pix16_t *pix, bool jrpg)
                w->step == PIX16_WIZ_CONFIRM ? text : dim, (size_t)cols - 1);
          continue;
       }
-      if (!jrpg && sel)
-         pix16_fill(pix, x + 6, ty - 3, PIX16_WIZ_W - 12, PIX16_WIZ_RH - 1,
-               pix->conv(0xFF52C86A));
+      if (sel)
+         pix16_vgradient(pix, x + 6, ty - 3, PIX16_WIZ_W - 12, PIX16_WIZ_RH - 1,
+               pix->sel_top, pix->sel_bot);
       pix16_text_ticker(pix, x + 28, ty,
             label,
             (kind == PIX16_WR_ADD || kind == PIX16_WR_USE_DIR) ? gold
@@ -7107,6 +8384,7 @@ static void pix16_draw_handover(pix16_t *pix)
    retro_time_t ms = (menu_driver_get_current_time() - pix->handover_t0) / 1000;
    unsigned f = 255;
 
+   /* reduced motion: no flash, just hold black */
    if (ms > 120)
    {
       int t = (int)(ms - 120);
@@ -7305,6 +8583,225 @@ static void pix16_launch_zoom(pix16_t *pix, float t)
    }
 }
 
+/* Late in an effect that ends dark: wash to white, so the handover's
+ * flash does not cut in */
+static void pix16_launch_flashout(pix16_t *pix, float t)
+{
+   size_t i, n = (size_t)PIX16_FB_WIDTH * (size_t)PIX16_FB_HEIGHT;
+   unsigned f;
+   if (t <= 0.85f)
+      return;
+   f = (unsigned)((t - 0.85f) / 0.15f * 255.0f);
+   if (f > 255)
+      f = 255;
+   for (i = 0; i < n; i++)
+      pix->fb[i] = pix16_toward_white(pix->fb[i], f, pix->fmt_565);
+}
+
+/* The picture closes down to a point behind a bright iris */
+static void pix16_launch_iris(pix16_t *pix, float t)
+{
+   int w  = PIX16_FB_WIDTH;
+   int h  = PIX16_FB_HEIGHT;
+   int cx = w / 2;
+   int cy = h / 2;
+   float rmax = (float)((w < h) ? w : h) * 0.62f;
+   float r    = rmax * (1.0f - t);
+   uint16_t rim   = pix->conv(0xFFFFFFFF);
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   int x, y;
+
+   memcpy(pix->upload, pix->fb, (size_t)w * (size_t)h * sizeof(uint16_t));
+   for (y = 0; y < h; y++)
+   {
+      float dy = (float)(y - cy);
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         float dx = (float)(x - cx);
+         float d  = sqrtf(dx * dx + dy * dy);
+         if (d <= r)
+            row[x] = pix->upload[(size_t)y * (size_t)w + x];
+         else if (d <= r + 2.0f)
+            row[x] = rim;
+         else
+            row[x] = empty;
+      }
+   }
+   pix16_launch_flashout(pix, t);
+}
+
+/* A wipe line sweeps down the screen, black behind it */
+static void pix16_launch_wipe(pix16_t *pix, float t)
+{
+   int w = PIX16_FB_WIDTH;
+   int h = PIX16_FB_HEIGHT;
+   float line = t * (float)(h + 10);
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   int x, y;
+
+   memcpy(pix->upload, pix->fb, (size_t)w * (size_t)h * sizeof(uint16_t));
+   for (y = 0; y < h; y++)
+   {
+      float d = line - (float)y;
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         uint16_t c = pix->upload[(size_t)y * (size_t)w + x];
+         if (d > 8.0f)
+            c = empty;
+         else if (d > 0.0f)
+            c = pix16_toward_white(c, (unsigned)(d / 8.0f * 255.0f),
+                  pix->fmt_565);
+         row[x] = c;
+      }
+   }
+   pix16_launch_flashout(pix, t);
+}
+
+/* The picture crumbles away pixel by pixel */
+static void pix16_launch_dissolve(pix16_t *pix, float t)
+{
+   int w = PIX16_FB_WIDTH;
+   int h = PIX16_FB_HEIGHT;
+   unsigned cut   = (unsigned)(t * 300.0f);
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   int x, y;
+
+   for (y = 0; y < h; y++)
+   {
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         unsigned n = pix16_hash((uint32_t)(y * w + x) * 2654435761u);
+         if ((n & 0xFF) < cut)
+            row[x] = empty;
+      }
+   }
+   pix16_launch_flashout(pix, t);
+}
+
+/* The screen splits down the middle and the halves slide apart */
+static void pix16_launch_split(pix16_t *pix, float t)
+{
+   int w   = PIX16_FB_WIDTH;
+   int h   = PIX16_FB_HEIGHT;
+   int off = (int)(t * t * (float)w * 0.7f);
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   uint16_t rim   = pix->conv(0xFFFFFFFF);
+   int x, y;
+
+   memcpy(pix->upload, pix->fb, (size_t)w * (size_t)h * sizeof(uint16_t));
+   for (y = 0; y < h; y++)
+   {
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         if (x < w / 2)
+         {
+            int src = x + off;
+            row[x]  = (src < w / 2)
+                  ? pix->upload[(size_t)y * (size_t)w + src] : empty;
+         }
+         else
+         {
+            int src = x - off;
+            row[x]  = (src >= w / 2)
+                  ? pix->upload[(size_t)y * (size_t)w + src] : empty;
+         }
+      }
+   }
+   /* the parting edges */
+   if (w / 2 - off - 1 >= 0)
+      pix16_fill(pix, w / 2 - off - 1, 0, 1, h, rim);
+   if (w / 2 + off < w)
+      pix16_fill(pix, w / 2 + off, 0, 1, h, rim);
+   pix16_launch_flashout(pix, t);
+}
+
+/* A white blast grows from the middle and swallows the screen */
+static void pix16_launch_blast(pix16_t *pix, float t)
+{
+   int w  = PIX16_FB_WIDTH;
+   int h  = PIX16_FB_HEIGHT;
+   int cx = w / 2;
+   int cy = h / 2;
+   float rmax = (float)((w < h) ? w : h) * 0.75f;
+   float r    = t * rmax * 1.5f;
+   uint16_t white = pix->conv(0xFFFFFFFF);
+   uint16_t glow  = pix->conv(0xFFE8F0FF);
+   int x, y;
+
+   memcpy(pix->upload, pix->fb, (size_t)w * (size_t)h * sizeof(uint16_t));
+   for (y = 0; y < h; y++)
+   {
+      float dy = (float)(y - cy);
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         float dx = (float)(x - cx);
+         float d  = sqrtf(dx * dx + dy * dy);
+         if (d <= r)
+            row[x] = white;
+         else if (d <= r + 6.0f)
+            row[x] = glow;
+         else
+            row[x] = pix->upload[(size_t)y * (size_t)w + x];
+      }
+   }
+}
+
+/* The picture rolls up, a blanking bar sweeping through it */
+static void pix16_launch_roll(pix16_t *pix, float t)
+{
+   int w = PIX16_FB_WIDTH;
+   int h = PIX16_FB_HEIGHT;
+   int shift = (int)(t * t * (float)h * 2.4f);
+   int band  = h / 5;
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   int x, y;
+
+   memcpy(pix->upload, pix->fb, (size_t)w * (size_t)h * sizeof(uint16_t));
+   for (y = 0; y < h; y++)
+   {
+      int sy = (y + shift) % h;
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      if (sy < band)
+      {
+         for (x = 0; x < w; x++)
+            row[x] = empty;
+      }
+      else
+         memcpy(row, pix->upload + (size_t)sy * (size_t)w,
+               sizeof(uint16_t) * (size_t)w);
+   }
+   pix16_launch_flashout(pix, t);
+}
+
+/* The picture breaks up into noise and cuts out */
+static void pix16_launch_static(pix16_t *pix, float t)
+{
+   int w = PIX16_FB_WIDTH;
+   int h = PIX16_FB_HEIGHT;
+   unsigned seed  = (unsigned)(t * 60.0f) * 2654435761u;
+   unsigned cut   = (unsigned)(t * t * 320.0f);
+   uint16_t empty = pix->colors[PIX16_C_J_BG];
+   uint16_t white = pix->conv(0xFFFFFFFF);
+   int x, y;
+
+   for (y = 0; y < h; y++)
+   {
+      uint16_t *row = pix->fb + (size_t)y * (size_t)w;
+      for (x = 0; x < w; x++)
+      {
+         unsigned n = pix16_hash((uint32_t)(y * w + x) ^ seed);
+         if ((n & 0xFF) < cut)
+            row[x] = ((n >> 9) & 7) ? empty : white;
+      }
+   }
+   pix16_launch_flashout(pix, t);
+}
+
 static void pix16_launch_effect(pix16_t *pix, float t)
 {
    switch (pix->launch_kind)
@@ -7317,6 +8814,27 @@ static void pix16_launch_effect(pix16_t *pix, float t)
          break;
       case PIX16_TRANSITION_ZOOM:
          pix16_launch_zoom(pix, t);
+         break;
+      case PIX16_TRANSITION_IRIS:
+         pix16_launch_iris(pix, t);
+         break;
+      case PIX16_TRANSITION_WIPE:
+         pix16_launch_wipe(pix, t);
+         break;
+      case PIX16_TRANSITION_DISSOLVE:
+         pix16_launch_dissolve(pix, t);
+         break;
+      case PIX16_TRANSITION_SPLIT:
+         pix16_launch_split(pix, t);
+         break;
+      case PIX16_TRANSITION_BLAST:
+         pix16_launch_blast(pix, t);
+         break;
+      case PIX16_TRANSITION_ROLL:
+         pix16_launch_roll(pix, t);
+         break;
+      case PIX16_TRANSITION_STATIC:
+         pix16_launch_static(pix, t);
          break;
       default:
          pix16_battle_swirl(pix, t);
@@ -7588,6 +9106,7 @@ static void pix16_render(void *data, unsigned dims, bool is_idle)
             && pix16_is_grid_view();
       if (     pix->scr_key_valid && key != pix->scr_key
             && pix->slide_old
+            && !pix->reduced_motion
             && (  (opt_now && pix->prev_opt && tab != pix->prev_tab)
                || grid_now))
       {
@@ -7609,7 +9128,12 @@ static void pix16_render(void *data, unsigned dims, bool is_idle)
          pix->tr_old_n = pix->scr_key_valid ? pix->last_n : 0;
          if (pix->tr_old_n)
             memcpy(pix->tr_old, pix->last, sizeof(pix16_rect_t) * pix->tr_old_n);
-         pix->tr_active     = jrpg;
+         /* a list that is still being fetched (the core downloader asks
+          * the network first): do not shrink the previous screen's windows
+          * over it, or they look like a flash of the wrong menu */
+         pix->tr_active     = jrpg && !MENU_ENTRIES_NEEDS_REFRESH(menu_st);
+         if (!pix->tr_active)
+            pix->tr_old_n = 0;
          pix->tr_t0         = now;
          pix->scr_key       = key;
          pix->scr_key_valid = true;
@@ -7621,7 +9145,7 @@ static void pix16_render(void *data, unsigned dims, bool is_idle)
       {
          if (pop)
             pix->pop_t0 = now;
-         if (pix->pop_prev && jrpg)
+         if (pix->pop_prev && jrpg && !pix->reduced_motion)
          {
             /* the popup that just closed shrinks away (unless another
              * one replaced it straight away) */
@@ -8647,6 +10171,98 @@ static int pix16_menu_entry_action(void *userdata, menu_entry_t *entry,
       pix16_grid_build(pix);
       cnt = pix->grid_count;
 
+      /* Actions for one system */
+      if (pix->order_open && pix->mg_open)
+      {
+         pix16_mg_input(pix, action);
+         return generic_menu_entry_action(userdata, entry, i, MENU_ACTION_NOOP);
+      }
+
+      /* System order window */
+      if (pix->order_open)
+      {
+         switch (action)
+         {
+            case MENU_ACTION_UP:
+               if (pix->order_sel > 0)
+               {
+                  pix->order_sel--;
+                  pix16_sfx(PIX16_SFX_UP);
+               }
+               break;
+            case MENU_ACTION_DOWN:
+               if ((size_t)(pix->order_sel + 1) < pix->order_n)
+               {
+                  pix->order_sel++;
+                  pix16_sfx(PIX16_SFX_DOWN);
+               }
+               break;
+            case MENU_ACTION_LEFT:
+               if (pix->order_sel > 0)
+               {
+                  size_t s = (size_t)pix->order_sel, tmp = pix->order_map[s];
+                  char tl[40];
+                  pix->order_map[s]     = pix->order_map[s - 1];
+                  pix->order_map[s - 1] = tmp;
+                  memcpy(tl, pix->order_label[s], 40);
+                  memcpy(pix->order_label[s], pix->order_label[s - 1], 40);
+                  memcpy(pix->order_label[s - 1], tl, 40);
+                  pix->order_sel--;
+                  pix16_sfx(PIX16_SFX_UP);
+               }
+               break;
+            case MENU_ACTION_RIGHT:
+               if ((size_t)(pix->order_sel + 1) < pix->order_n)
+               {
+                  size_t s = (size_t)pix->order_sel, tmp = pix->order_map[s];
+                  char tl[40];
+                  pix->order_map[s]     = pix->order_map[s + 1];
+                  pix->order_map[s + 1] = tmp;
+                  memcpy(tl, pix->order_label[s], 40);
+                  memcpy(pix->order_label[s], pix->order_label[s + 1], 40);
+                  memcpy(pix->order_label[s + 1], tl, 40);
+                  pix->order_sel++;
+                  pix16_sfx(PIX16_SFX_DOWN);
+               }
+               break;
+            case MENU_ACTION_OK:
+            case MENU_ACTION_START:
+               {
+                  file_list_t *ol = pix16_selection_buf();
+                  size_t k;
+                  pix16_order_n = 0;
+                  if (ol)
+                     for (k = 0; k < pix->order_n && pix16_order_n < PIX16_ORDER_MAX; k++)
+                     {
+                        char base[NAME_MAX_LENGTH];
+                        pix16_order_base(ol->list[pix->order_map[k]].path, base,
+                              sizeof(base));
+                        if (base[0])
+                           strlcpy(pix16_order[pix16_order_n++], base,
+                                 sizeof(pix16_order[0]));
+                     }
+                  pix16_order_save();
+                  pix->order_open  = false;
+                  pix->order_focus = false;
+                  pix16_sfx(PIX16_SFX_OK);
+               }
+               break;
+            case MENU_ACTION_INFO:   /* Select */
+            case MENU_ACTION_SCAN:   /* Y / triangle */
+               pix16_mg_open(pix);
+               break;
+            case MENU_ACTION_CANCEL:
+               pix->order_open  = false;
+               pix->order_focus = false;
+               pix16_sfx(PIX16_SFX_BACK);
+               break;
+            default:
+               break;
+         }
+         pix->flags |= PIX16_FLAG_FORCE_REDRAW;
+         return generic_menu_entry_action(userdata, entry, i, MENU_ACTION_NOOP);
+      }
+
       /* Arcade collection / PC Engine picker */
       if (pix->arcade_open)
       {
@@ -8730,14 +10346,9 @@ static int pix16_menu_entry_action(void *userdata, menu_entry_t *entry,
          switch (action)
          {
             case MENU_ACTION_LEFT:
-               pix->add_focus = false;
+               pix->add_focus   = false;
+               pix->order_focus = true;
                pix16_sfx(PIX16_SFX_UP);
-               if (pix->top_idx[1] != PIX16_TOP_NONE)
-                  menu_st->selection_ptr = pix->top_idx[1];
-               else if (pix->top_idx[0] != PIX16_TOP_NONE)
-                  menu_st->selection_ptr = pix->top_idx[0];
-               else
-                  pix->power_focus = true;
                break;
             case MENU_ACTION_RIGHT:
                pix->add_focus  = false;
@@ -8760,6 +10371,17 @@ static int pix16_menu_entry_action(void *userdata, menu_entry_t *entry,
                pix16_wiz_open(pix);
                break;
             case MENU_ACTION_CANCEL:
+               if (cnt > 1)
+               {
+                  pix->add_focus   = false;
+                  pix->gear_focus  = false;
+                  pix->power_focus = false;
+                  pix16_order_fill(pix);
+                  pix->order_sel  = 0;
+                  pix->order_open = true;
+                  pix16_sfx(PIX16_SFX_OK);
+                  break;
+               }
                return generic_menu_entry_action(userdata, entry, i, action);
             default:
                break;
@@ -8829,6 +10451,53 @@ static int pix16_menu_entry_action(void *userdata, menu_entry_t *entry,
       }
 
       /* On the options gear */
+      if (pix->order_focus)
+      {
+         switch (action)
+         {
+            case MENU_ACTION_LEFT:
+               pix->order_focus = false;
+               pix16_sfx(PIX16_SFX_UP);
+               if (pix->top_idx[1] != PIX16_TOP_NONE)
+                  menu_st->selection_ptr = pix->top_idx[1];
+               else if (pix->top_idx[0] != PIX16_TOP_NONE)
+                  menu_st->selection_ptr = pix->top_idx[0];
+               else
+                  pix->power_focus = true;
+               break;
+            case MENU_ACTION_RIGHT:
+               pix->order_focus = false;
+               pix->add_focus   = true;
+               pix16_sfx(PIX16_SFX_DOWN);
+               break;
+            case MENU_ACTION_DOWN:
+               if (cnt > 0)
+               {
+                  size_t d = pix->grid_page * PIX16_GRID_PER_PAGE + PIX16_GRID_COLS - 2;
+                  if (d >= cnt)
+                     d = cnt - 1;
+                  pix->order_focus       = false;
+                  menu_st->selection_ptr = pix->grid_map[d];
+                  pix16_sfx(PIX16_SFX_DOWN);
+               }
+               break;
+            case MENU_ACTION_OK:
+            case MENU_ACTION_START:
+               if (cnt > 1)
+               {
+                  pix->order_focus = true;
+                  pix16_order_fill(pix);
+                  pix->order_sel  = 0;
+                  pix->order_open = true;
+                  pix16_sfx(PIX16_SFX_OK);
+               }
+               break;
+            default:
+               break;
+         }
+         pix->flags |= PIX16_FLAG_FORCE_REDRAW;
+         return generic_menu_entry_action(userdata, entry, i, MENU_ACTION_NOOP);
+      }
       if (pix->gear_focus)
       {
          switch (action)
@@ -8880,7 +10549,7 @@ static int pix16_menu_entry_action(void *userdata, menu_entry_t *entry,
          else if (action == MENU_ACTION_RIGHT
                && (f == 1 || pix->top_idx[1] == PIX16_TOP_NONE))
          {
-            pix->add_focus  = true;   /* on to the + button */
+            pix->order_focus = true;  /* on to the arrange button */
             moved           = true;
          }
          else if ((action == MENU_ACTION_RIGHT && f == 0)
@@ -8940,7 +10609,8 @@ static int pix16_menu_entry_action(void *userdata, menu_entry_t *entry,
                }
                break;
             case MENU_ACTION_RIGHT:
-               if (col + 1 < (size_t)PIX16_GRID_COLS && pos + 1 < cnt)
+               if (col + 1 < pix16_grid_row_count(page, row, cnt)
+                     && pos + 1 < cnt)
                {
                   pos++;
                   moved = true;
@@ -8958,8 +10628,13 @@ static int pix16_menu_entry_action(void *userdata, menu_entry_t *entry,
             case MENU_ACTION_UP:
                if (row > 0)
                {
-                  pos  -= PIX16_GRID_COLS;
-                  moved = true;
+                  size_t n = pix16_grid_row_count(page, row - 1, cnt);
+                  if (n)
+                  {
+                     pos = page * per + (row - 1) * PIX16_GRID_COLS
+                         + pix16_grid_col_for(row - 1, n, in, row);
+                     moved = true;
+                  }
                }
                else
                {
@@ -8993,15 +10668,11 @@ static int pix16_menu_entry_action(void *userdata, menu_entry_t *entry,
             case MENU_ACTION_DOWN:
                if (row + 1 < (size_t)PIX16_GRID_ROWS)
                {
-                  if (pos + PIX16_GRID_COLS < cnt)
+                  size_t n = pix16_grid_row_count(page, row + 1, cnt);
+                  if (n)
                   {
-                     pos  += PIX16_GRID_COLS;
-                     moved = true;
-                  }
-                  else if ((cnt - 1) / PIX16_GRID_COLS > pos / PIX16_GRID_COLS
-                        && (cnt - 1) / per == page)
-                  {
-                     pos   = cnt - 1; /* short last row */
+                     pos = page * per + (row + 1) * PIX16_GRID_COLS
+                         + pix16_grid_col_for(row + 1, n, in, row);
                      moved = true;
                   }
                }
@@ -9113,8 +10784,37 @@ static int pix16_menu_entry_action(void *userdata, menu_entry_t *entry,
    return generic_menu_entry_action(userdata, entry, i, action);
 }
 
-menu_ctx_driver_t menu_ctx_pix16 = {
-   pix16_set_texture,
+/* The empty library window is a button: a click opens the wizard */
+static int pix16_pointer_up(void *data, unsigned x, unsigned y, unsigned ptr,
+      enum menu_input_pointer_gesture gesture,
+      menu_file_list_cbs_t *cbs, menu_entry_t *entry, unsigned action)
+{
+   pix16_t *pix = (pix16_t*)data;
+   const pix16_rect_t *r;
+
+   (void)ptr;
+   (void)cbs;
+   (void)entry;
+   (void)action;
+
+   if (!pix || !pix->empty_show)
+      return -1;
+   if (     gesture != MENU_INPUT_GESTURE_TAP
+         && gesture != MENU_INPUT_GESTURE_SHORT_PRESS)
+      return -1;
+
+   r = &pix->empty_rect;
+   if (     (int)x < r->x || (int)x >= r->x + r->w
+         || (int)y < r->y || (int)y >= r->y + r->h)
+      return -1;
+
+   pix16_wiz_open(pix);
+   pix->add_focus = true;
+   pix->flags    |= PIX16_FLAG_FORCE_REDRAW;
+   return 0;
+}
+
+menu_ctx_driver_t menu_ctx_pix16 = {   pix16_set_texture,
    pix16_render_messagebox,
    pix16_render,
    pix16_frame,
@@ -9155,7 +10855,7 @@ menu_ctx_driver_t menu_ctx_pix16 = {
    NULL,                               /* update_savestate_thumbnail_path */
    NULL,                               /* update_savestate_thumbnail_image */
    NULL,                               /* pointer_down */
-   NULL,                               /* pointer_up */
+   pix16_pointer_up,                   /* pointer_up */
    pix16_menu_entry_action,
    NULL                                /* wheel_scroll */
 };

@@ -973,10 +973,10 @@ typedef struct settings
       bool menu_rgui_transparency;
       bool menu_rgui_shadows;
       bool menu_pix16_widescreen;
-      bool menu_pix16_classic_theme;
       bool menu_pix16_boot_screen;
       bool menu_pix16_start_screen;
       bool menu_pix16_screen_asked;
+      bool menu_pix16_reduced_motion;
       bool menu_rgui_inline_thumbnails;
       bool menu_rgui_swap_thumbnails;
       bool menu_rgui_thumbnail_dither;

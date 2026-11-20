@@ -94,7 +94,12 @@ static void frontend_psp_get_env_settings(int *argc, char *argv[],
 
 #ifdef VITA
    strlcpy_lit(eboot_path, "app0:/", sizeof(eboot_path));
+#if defined(HAVE_PIX16)
+   /* a pix16 build is a second instance: its own data, beside stock RetroArch */
+   strlcpy_lit(user_path, "ux0:/data/retroarch-pix16/", sizeof(user_path));
+#else
    strlcpy_lit(user_path, "ux0:/data/retroarch/", sizeof(user_path));
+#endif
 
    strlcpy(g_defaults.dirs[DEFAULT_DIR_PORT], eboot_path,
       sizeof(g_defaults.dirs[DEFAULT_DIR_PORT]));

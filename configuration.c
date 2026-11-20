@@ -329,6 +329,7 @@ enum menu_driver_enum
    MENU_XMB,
    MENU_STRIPES,
    MENU_OZONE,
+   MENU_PIX16,
    MENU_NULL
 };
 
@@ -840,7 +841,9 @@ static const enum location_driver_enum LOCATION_DEFAULT_DRIVER = LOCATION_CORELO
 static const enum location_driver_enum LOCATION_DEFAULT_DRIVER = LOCATION_NULL;
 #endif
 
-#if (defined(_3DS) || defined(DINGUX)) && defined(HAVE_RGUI)
+#if defined(HAVE_PIX16)
+static const enum menu_driver_enum MENU_DEFAULT_DRIVER = MENU_PIX16;
+#elif (defined(_3DS) || defined(DINGUX)) && defined(HAVE_RGUI)
 static const enum menu_driver_enum MENU_DEFAULT_DRIVER = MENU_RGUI;
 #elif TARGET_OS_IPHONE && !TARGET_OS_TV
 #define MENU_DEFAULT_DRIVER (ios_running_on_ipad() ? MENU_OZONE : MENU_MATERIALUI)
@@ -1914,6 +1917,8 @@ const char *config_get_default_menu(void)
          return "xmb";
       case MENU_STRIPES:
          return "stripes";
+      case MENU_PIX16:
+         return "pix16";
       case MENU_NULL:
          break;
    }
