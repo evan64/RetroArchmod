@@ -2056,6 +2056,10 @@ MENU
 #include "../menu/drivers/xmb.c"
 #endif
 
+#ifdef HAVE_PIX16
+#include "../menu/drivers/pix16.c"
+#endif
+
 #ifdef HAVE_OZONE
 #include "../menu/drivers/ozone.c"
 #endif
