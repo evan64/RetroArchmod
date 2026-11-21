@@ -105,7 +105,8 @@ enum gfx_display_driver_type
    GFX_VIDEO_DRIVER_SWITCH,
    GFX_VIDEO_DRIVER_RSX,
    GFX_VIDEO_DRIVER_SDL2,
-   GFX_VIDEO_DRIVER_SDL3
+   GFX_VIDEO_DRIVER_SDL3,
+   GFX_VIDEO_DRIVER_DEKO3D
 };
 
 typedef struct gfx_display_ctx_draw gfx_display_ctx_draw_t;
@@ -152,9 +153,9 @@ typedef struct gfx_display_effect_desc
    size_t spirv_vertex_size;
    size_t spirv_fragment_size;
    /* HLSL: shader model 3 with main_vertex and main_fragment, for
-    * D3D9; shader model 4 with VSMain and PSMain, for D3D10 to 12 */
+    * D3D9; a native program identifier with VSMain and PSMain, for D3D10 to 12 */
    const char *hlsl_sm3;
-   const char *hlsl_sm4;
+   const char *d3d_program;
    /* Cg for GL, with main_vertex and main_fragment: what gl2 draws
     * with where it has no GLSL */
    const char *cg_gl;
@@ -167,6 +168,21 @@ typedef struct gfx_display_effect_desc
    unsigned metal_constant_count;
    /* Wii U: the GX2 shader group */
    const void *gx2;
+   /* DKSH from uam (deko3d_shaders/menu_effects_dksh.h), for deko3d
+    * and the Switch driver's 3D engine */
+   const uint8_t *dksh_vertex;
+   const uint8_t *dksh_fragment;
+   size_t dksh_vertex_size;
+   size_t dksh_fragment_size;
+   /* SM 8.6 from NAK (deko3d_shaders/menu_effects_sm86.h): each
+    * program's 128-byte header then its code, and its registers, for
+    * the Switch 2 driver's 3D engine */
+   const uint32_t *sm86_vertex;
+   const uint32_t *sm86_fragment;
+   size_t sm86_vertex_size;
+   size_t sm86_fragment_size;
+   unsigned sm86_vertex_gprs;
+   unsigned sm86_fragment_gprs;
 } gfx_display_effect_desc_t;
 
 typedef struct gfx_display_effect gfx_display_effect_t;
@@ -231,6 +247,10 @@ typedef struct gfx_display_ctx_driver
     * draw_pipeline and draw with draw->effect set to it. */
    void *(*effect_install)(void *data,
          const gfx_display_effect_desc_t *desc);
+   /* Samples the borrowed viewer texture through an independent shader
+    * chain. False leaves the ordinary texture draw as its fallback. */
+   bool (*media_shader_draw)(void *data, uintptr_t texture,
+         unsigned source_dims, unsigned video_dims, unsigned pos, unsigned dims);
 } gfx_display_ctx_driver_t;
 
 struct gfx_display_ctx_draw
@@ -265,12 +285,6 @@ typedef struct gfx_display_ctx_coord_draw
 {
    const float *ptr;
 } gfx_display_ctx_coord_draw_t;
-
-typedef struct gfx_display_ctx_datetime
-{
-   unsigned time_mode;
-   unsigned date_separator;
-} gfx_display_ctx_datetime_t;
 
 typedef struct gfx_display_ctx_powerstate
 {
@@ -609,6 +623,10 @@ void gfx_display_blend_begin(gfx_display_ctx_driver_t *dispctx,
 void gfx_display_blend_end(gfx_display_ctx_driver_t *dispctx,
       void *userdata);
 
+bool gfx_display_draw_media_shader(gfx_display_ctx_driver_t *dispctx,
+      void *userdata, uintptr_t texture, unsigned source_dims,
+      unsigned video_dims, unsigned pos, unsigned dims);
+
 void gfx_display_draw(gfx_display_ctx_driver_t *dispctx,
       gfx_display_ctx_draw_t *draw, void *userdata,
       unsigned video_dims);
@@ -684,6 +702,7 @@ extern gfx_display_ctx_driver_t gfx_display_ctx_wiiu;
 extern gfx_display_ctx_driver_t gfx_display_ctx_gdi;
 extern gfx_display_ctx_driver_t gfx_display_ctx_switch;
 extern gfx_display_ctx_driver_t gfx_display_ctx_rsx;
+extern gfx_display_ctx_driver_t gfx_display_ctx_deko3d;
 extern gfx_display_ctx_driver_t gfx_display_ctx_sdl2;
 extern gfx_display_ctx_driver_t gfx_display_ctx_sdl3;
 

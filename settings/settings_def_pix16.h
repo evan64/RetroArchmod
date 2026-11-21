@@ -16,15 +16,6 @@ S_BOOL(menu_pix16_widescreen, MENU_PIX16_WIDESCREEN,
 /* The configuration row lives under defined(HAVE_MENU) && defined(HAVE_PIX16); other passes are
  * unaffected. */
 #if !defined(SETTINGS_DEF_CONFIG_PASS) || (defined(HAVE_MENU) && defined(HAVE_PIX16))
-S_BOOL(menu_pix16_classic_theme, MENU_PIX16_CLASSIC_THEME,
-      "menu_pix16_classic_theme",
-      DEFAULT_PIX16_CLASSIC_THEME, SD_FLAG_NONE, 0, 0,
-      "Classic Theme",
-      "Draw flat colored panels instead of the JRPG-style windows.")
-#endif
-/* The configuration row lives under defined(HAVE_MENU) && defined(HAVE_PIX16); other passes are
- * unaffected. */
-#if !defined(SETTINGS_DEF_CONFIG_PASS) || (defined(HAVE_MENU) && defined(HAVE_PIX16))
 S_BOOL(menu_pix16_boot_screen, MENU_PIX16_BOOT_SCREEN,
       "menu_pix16_boot_screen",
       DEFAULT_PIX16_BOOT_SCREEN, SD_FLAG_NONE, 0, 0,
@@ -70,9 +61,27 @@ S_UINT_EX(menu_pix16_transition, MENU_PIX16_TRANSITION,
 /* The configuration row lives under defined(HAVE_MENU) && defined(HAVE_PIX16); other passes are
  * unaffected. */
 #if !defined(SETTINGS_DEF_CONFIG_PASS) || (defined(HAVE_MENU) && defined(HAVE_PIX16))
+S_UINT_EX(menu_pix16_background, MENU_PIX16_BACKGROUND,
+      "menu_pix16_background",
+      DEFAULT_PIX16_BACKGROUND, SD_FLAG_NONE, SDESC_RANGE_MINMAX, 0, 0, PIX16_BACKGROUND_LAST-1, 1, 0, setting_action_ok_uint, setting_get_string_representation_uint_pix16_background, NULL, NULL, NULL, NULL, ST_UI_TYPE_UINT_COMBOBOX,
+      "Background",
+      "Animated pattern drawn behind the menu windows.")
+#endif
+/* The configuration row lives under defined(HAVE_MENU) && defined(HAVE_PIX16); other passes are
+ * unaffected. */
+#if !defined(SETTINGS_DEF_CONFIG_PASS) || (defined(HAVE_MENU) && defined(HAVE_PIX16))
 S_UINT_EX(menu_pix16_palette, MENU_PIX16_PALETTE,
       "menu_pix16_palette",
       DEFAULT_PIX16_PALETTE, SD_FLAG_NONE, SDESC_RANGE_MINMAX, 0, 0, PIX16_PALETTE_LAST-1, 1, 0, setting_action_ok_uint, setting_get_string_representation_uint_pix16_palette, NULL, NULL, NULL, NULL, ST_UI_TYPE_UINT_COMBOBOX,
       "Color Theme",
       "Overall color scheme of the pix16 menu.")
+#endif
+/* The configuration row lives under defined(HAVE_MENU) && defined(HAVE_PIX16); other passes are
+ * unaffected. */
+#if !defined(SETTINGS_DEF_CONFIG_PASS) || (defined(HAVE_MENU) && defined(HAVE_PIX16))
+S_BOOL(menu_pix16_reduced_motion, MENU_PIX16_REDUCED_MOTION,
+      "menu_pix16_reduced_motion",
+      DEFAULT_PIX16_REDUCED_MOTION, SD_FLAG_NONE, 0, 0,
+      "Reduced Motion",
+      "Turn off sliding, growing, scrolling and launch animations. Transitions become instant.")
 #endif

@@ -60,6 +60,14 @@
  *               cursor, at its left edge - for a space the wrap made a
  *               line end, after the line it ends
  *
+ *               The same with 40 Hebrew words, drawn right to left:
+ *               the caret at the right edge of the letter after the
+ *               cursor, at the left end of its line at the line's end
+ *
+ *   reopen      XMB and MaterialUI: the search dialog with 40 words
+ *               typed, closed and opened again with nothing typed:
+ *               each frame of it draws its label and none of the words
+ *
  *   redraw      RGUI only: the box is drawn into RGUI's framebuffer,
  *               which goes to the video driver once when the box comes
  *               up, once for each change to it - a newer box, the lit
@@ -69,7 +77,7 @@
  * Usage: msgbox_layout_test ozone|xmb|materialui short|tall|firmware
  *        msgbox_layout_test ozone|xmb|materialui heading|heading_wrap
  *        msgbox_layout_test ozone|xmb|materialui heading_none|heading_fit
- *        msgbox_layout_test xmb|materialui caret|heading_osk
+ *        msgbox_layout_test xmb|materialui caret|heading_osk|reopen
  *        msgbox_layout_test rgui redraw
  *
  * Requires a completed non-Qt build, same as the other menu harnesses:
@@ -128,6 +136,7 @@ typedef struct
    float x;
    float y;
    float w; /* pixels */
+   uint32_t color;
 } drawn_t;
 
 static drawn_t drawn[DRAWN_MAX];
@@ -187,6 +196,7 @@ static void record_text(const harness_face_t *face, const char *msg,
    drawn[drawn_count].text[msg_len] = '\0';
    drawn[drawn_count].x = params ? params->x : 0.0f;
    drawn[drawn_count].y = params ? params->y : 0.0f;
+   drawn[drawn_count].color = params ? params->color : 0;
    drawn[drawn_count].w = face ? glyph_w(face, msg, msg_len)
          * (params ? params->scale : 1.0f) : 0.0f;
    drawn_count++;
@@ -363,6 +373,7 @@ typedef struct
    int y;
    unsigned w;
    unsigned h;
+   float color[4];
 } harness_quad_t;
 
 static harness_quad_t quads[QUADS_MAX];
@@ -382,6 +393,10 @@ void __wrap_gfx_display_draw_quad(gfx_display_t *p_disp, void *data,
       quads[quad_count].y = y;
       quads[quad_count].w = VIDEO_SCALE_W(dims);
       quads[quad_count].h = VIDEO_SCALE_H(dims);
+      if (color)
+         memcpy(quads[quad_count].color, color, sizeof(quads[quad_count].color));
+      else
+         memset(quads[quad_count].color, 0, sizeof(quads[quad_count].color));
       quad_count++;
    }
    __real_gfx_display_draw_quad(p_disp, data, video_dims, x, y, dims,
@@ -831,6 +846,216 @@ static void caret_lane(unsigned w, unsigned h)
 
    menu_input_dialog_end();
    printf("[caret] %u cursor position(s) at %ux%u\n", checked, w, h);
+}
+
+/* --- the input dialog's caret among Hebrew ------------------------- */
+
+/* Hebrew typed: 40 words of three letters, no two alike, so every drawn
+ * line can be found in what was typed */
+static size_t type_hebrew(char *s, size_t len)
+{
+   size_t   _len = 0;
+   unsigned i;
+   s[0] = '\0';
+   for (i = 0; i < TYPED_TOKENS; i++)
+   {
+      /* U+05D0 - U+05EA: alef to tav */
+      unsigned a = i % 27, b = (i / 27 + i) % 27, c = (i * 7 + 3) % 27;
+      char     word[16];
+      snprintf(word, sizeof(word), "%s%c%c%c%c%c%c", i ? " " : "",
+            0xD7, 0x90 + a, 0xD7, 0x90 + b, 0xD7, 0x90 + c);
+      _len += strlcpy(s + _len, word, len - _len);
+   }
+   return _len;
+}
+
+/* Whether a drawn line is Hebrew typed: Hebrew letters and spaces only.
+ * The harness records lines as the driver hands them over, in typed
+ * order; the renderer draws them right to left. */
+static bool hebrew_line(const char *t)
+{
+   bool any = false;
+   for (; *t; t++)
+   {
+      if ((unsigned char)*t == 0xD7 && t[1])
+      {
+         any = true;
+         t++;
+      }
+      else if (*t != ' ')
+         return false;
+   }
+   return any;
+}
+
+static void caret_rtl_lane(unsigned w, unsigned h)
+{
+   input_driver_state_t *input_st = input_state_get_ptr();
+   struct menu_state *menu_st     = menu_state_get_ptr();
+   char     typed[512];
+   size_t   typed_len = type_hebrew(typed, sizeof(typed));
+   size_t   at[48];
+   size_t   at_count  = 0;
+   size_t   k;
+   unsigned checked   = 0;
+
+   box_text[0] = '\0';
+   CHECK(menu_input_dialog_start_search(), "fixture: no input dialog");
+   input_keyboard_line_append(&input_st->keyboard_line, typed, typed_len);
+   input_st->keyboard_line.select_all = false;
+   CHECK(input_driver_keyboard_line_state() & INPUT_KEYBOARD_LINE_RTL,
+         "[caret rtl] typed Hebrew does not mark the line");
+   menu_st->current_time_us           = 500000;
+
+   input_st->keyboard_line.ptr = typed_len;
+   one_frame(w, h);
+   at[at_count++] = 0;
+   at[at_count++] = 4;
+   for (k = 0; k < drawn_count && at_count + 3 < sizeof(at) / sizeof(at[0]);
+         k++)
+   {
+      const char *s0;
+      if (     !hebrew_line(drawn[k].text)
+            || !(s0 = strstr(typed, drawn[k].text)) || s0 == typed)
+         continue;
+      at[at_count++] = (size_t)(s0 - typed);
+      at[at_count++] = (size_t)(s0 - typed) - 1;
+      at[at_count++] = (size_t)(s0 - typed) + 2;
+   }
+   at[at_count++] = typed_len;
+   CHECK(at_count > 4, "fixture: the typed Hebrew was not wrapped");
+
+   for (k = 0; k < at_count; k++)
+   {
+      size_t   p      = at[k];
+      unsigned i, carets = 0;
+      const harness_quad_t *caret = NULL;
+      bool     found  = false;
+      float    want_x = 0.0f;
+
+      input_st->keyboard_line.ptr = p;
+      for (i = 0; i < 2; i++)
+      {
+         one_frame(w, h);
+         menu_st->current_time_us = 500000;
+      }
+      for (i = 0; i < quad_count; i++)
+         if (quads[i].w == 2)
+         {
+            caret = &quads[i];
+            carets++;
+         }
+      CHECK(carets == 1, "[caret rtl] %u caret(s) drawn for the cursor at "
+            "%u", carets, (unsigned)p);
+      if (carets != 1)
+         continue;
+
+      /* The drawn line holding the cursor, read right to left: before a
+       * letter at its right edge, at the end of the line its left */
+      for (i = 0; i < drawn_count && !found; i++)
+      {
+         const char *line = drawn[i].text;
+         const char *s0;
+         size_t      start, n, chars, col, j;
+         if (!hebrew_line(line) || !(s0 = strstr(typed, line)))
+            continue;
+         start = (size_t)(s0 - typed);
+         n     = strlen(line);
+         if (p < start || p > start + n)
+            continue;
+         /* A cursor on the space a line was broken at sits at its end */
+         if (p == start + n && p < typed_len && typed[p] != ' ')
+            continue;
+         for (j = 0, chars = 0, col = 0; j < n; j++)
+            if (((unsigned char)line[j] & 0xC0) != 0x80)
+            {
+               if (j < p - start)
+                  col++;
+               chars++;
+            }
+         want_x = drawn[i].x * w
+            + drawn[i].w / (float)chars * (float)(chars - col);
+         found  = true;
+         CHECK(     caret->x - want_x < 1.5f && want_x - caret->x < 1.5f,
+               "[caret rtl] cursor at %u: caret at x %d, want %.1f "
+               "(column %u of %u)", (unsigned)p, caret->x, want_x,
+               (unsigned)col, (unsigned)chars);
+      }
+      CHECK(found, "[caret rtl] no drawn line holds byte %u", (unsigned)p);
+      checked++;
+   }
+
+   /* English typed over the Hebrew: the line is unmarked again */
+   input_st->keyboard_line.select_all = true;
+   input_keyboard_line_append(&input_st->keyboard_line, "abc", 3);
+   CHECK(!(input_driver_keyboard_line_state() & INPUT_KEYBOARD_LINE_RTL),
+         "[caret rtl] English typed over Hebrew leaves the line marked");
+
+   menu_input_dialog_end();
+   printf("[caret rtl] %u cursor position(s) at %ux%u\n", checked, w, h);
+}
+
+/* --- the input dialog opened again --------------------------------- */
+
+/* Whether a drawn line holds any of the typed words, wherever it starts */
+static bool has_typed_token(const char *t)
+{
+   for (; *t; t++)
+      if (     t[0] == 't'
+            && t[1] >= '0' && t[1] <= '9'
+            && t[2] >= '0' && t[2] <= '9')
+         return true;
+   return false;
+}
+
+/* The search dialog with 40 words typed, closed, and opened again with
+ * nothing typed: every frame of the second draws its label and none of
+ * the words the first held - the text the driver keeps is the second's
+ * whole, not the first's with the second written over its start */
+static void reopen_lane(unsigned w, unsigned h)
+{
+   input_driver_state_t *input_st = input_state_get_ptr();
+   struct menu_state *menu_st     = menu_state_get_ptr();
+   const char *label = msg_hash_to_str(MENU_ENUM_LABEL_VALUE_SEARCH);
+   char typed[256];
+   size_t typed_len = type_tokens(typed, sizeof(typed));
+   unsigned frame;
+
+   box_text[0] = '\0';
+   CHECK(menu_input_dialog_start_search(), "fixture: no input dialog");
+   input_keyboard_line_append(&input_st->keyboard_line, typed, typed_len);
+   input_st->keyboard_line.select_all = false;
+   input_st->keyboard_line.ptr        = typed_len;
+   menu_st->current_time_us           = 500000;
+   /* The first frame wraps the text, the second draws what was kept */
+   one_frame(w, h);
+   one_frame(w, h);
+   menu_input_dialog_end();
+
+   CHECK(menu_input_dialog_start_search(), "fixture: no input dialog");
+   for (frame = 1; frame <= 4; frame++)
+   {
+      unsigned i, words = 0;
+      bool labelled     = false;
+      menu_st->current_time_us = 500000;
+      one_frame(w, h);
+      for (i = 0; i < drawn_count; i++)
+      {
+         const char *t = drawn[i].text;
+         if (string_is_equal(t, label))
+            labelled = true;
+         else if (has_typed_token(t))
+            words++;
+      }
+      CHECK(labelled, "[reopen] frame %u: the label \"%s\" not drawn",
+            frame, label);
+      CHECK(!words, "[reopen] frame %u: %u line(s) of the text typed "
+            "into the dialog before drawn", frame, words);
+   }
+
+   menu_input_dialog_end();
+   printf("[reopen] the input dialog opened again draws only its own "
+         "text at %ux%u\n", w, h);
 }
 
 /* --- the confirm box's heading ------------------------------------- */
@@ -1348,9 +1573,15 @@ static void firmware_lane(unsigned w, unsigned h)
          float baseline = (1.0f - line->y) * h;
          for (i = 0; i < quad_count; i++)
          {
-            /* A line 1 px high just under the line's baseline; the
-             * menus' other 1 px lines (separators) are elsewhere */
+            /* Background separators can share the path's baseline.
+             * Its underline uses the text's foreground color. */
             if (     quads[i].h != 1
+                  || !within(quads[i].color[0],
+                     FONT_COLOR_GET_RED(line->color) / 255.0f, 0.001f)
+                  || !within(quads[i].color[1],
+                     FONT_COLOR_GET_GREEN(line->color) / 255.0f, 0.001f)
+                  || !within(quads[i].color[2],
+                     FONT_COLOR_GET_BLUE(line->color) / 255.0f, 0.001f)
                   || (float)quads[i].y < baseline - 0.5f
                   || (float)quads[i].y > baseline + 2.5f)
                continue;
@@ -1488,7 +1719,8 @@ int main(int argc, char *argv[])
    else
       ident = NULL;
    if (     (string_is_equal(which, "caret")
-            || string_is_equal(which, "heading_osk"))
+            || string_is_equal(which, "heading_osk")
+            || string_is_equal(which, "reopen"))
          && !string_is_equal(driver, "xmb")
          && !string_is_equal(driver, "materialui"))
       ident = NULL;
@@ -1501,12 +1733,13 @@ int main(int argc, char *argv[])
             && !string_is_equal(which, "heading_fit")
             && !string_is_equal(which, "heading_osk")
             && !string_is_equal(which, "caret")
+            && !string_is_equal(which, "reopen")
             && !string_is_equal(which, "redraw")))
    {
       fprintf(stderr, "usage: %s ozone|xmb|materialui short|tall|firmware\n"
             "       %s ozone|xmb|materialui heading|heading_wrap\n"
             "       %s ozone|xmb|materialui heading_none|heading_fit\n"
-            "       %s xmb|materialui caret|heading_osk\n"
+            "       %s xmb|materialui caret|heading_osk|reopen\n"
             "       %s rgui redraw\n", argv[0], argv[0], argv[0], argv[0],
             argv[0]);
       return 2;
@@ -1576,12 +1809,20 @@ int main(int argc, char *argv[])
          heading_fit_lane(1280, 720);
       else if (string_is_equal(which, "heading_osk"))
          heading_osk_lane(1280, 720);
+      else if (string_is_equal(which, "reopen"))
+      {
+         menu_dialog_confirm_clear(menu_st);
+         reopen_lane(1280, 720);
+      }
       else
       {
          menu_dialog_confirm_clear(menu_st);
          caret_lane(640, 480);
          caret_lane(720, 480);
          caret_lane(800, 600);
+         caret_rtl_lane(640, 480);
+         caret_rtl_lane(720, 480);
+         caret_rtl_lane(800, 600);
       }
    }
 

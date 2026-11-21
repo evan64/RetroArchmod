@@ -174,7 +174,7 @@ static void stopped(audio_mixer_sound_t *s, unsigned reason)
 
 bool audio_driver_mixer_add_stream(audio_mixer_stream_params_t *p)
 {
-   sound = audio_mixer_load_m4a(p->buf, p->bufsize);
+   #include "preview_m4a_load.h"
    audio_mixer_sound_set_data_owner(sound, p->buf_owner, p->buf_owner_free);
    if (!sound) return false;
    audio_mixer_sound_set_avail(sound, p->avail);
@@ -407,6 +407,55 @@ static int run_one(const char *path, unsigned rate)
    return failed;
 }
 
+static int startup_session(const char *path)
+{
+   FILE *file = fopen(path, "rb");
+   uint8_t *data;
+   size_t size, i;
+   long length;
+   rmp4_t *demux;
+   gfx_anim_preview_t *p;
+   float block[128];
+   double energy = 0;
+   int failed;
+   if (!file) return 1;
+   fseek(file, 0, SEEK_END);
+   length = ftell(file);
+   rewind(file);
+   data = length > 0 ? (uint8_t*)malloc((size_t)length) : NULL;
+   size = (size_t)length;
+   if (!data || fread(data, 1, size, file) != size)
+   { free(data); fclose(file); return 1; }
+   fclose(file);
+   demux = rmp4_open_memory(data, size);
+   if (!demux) { free(data); return 1; }
+   p = gfx_anim_preview_wrap(demux, IMAGE_TYPE_MP4, NULL, data, size, false, path);
+   if (!p) { rmp4_close(demux); free(data); return 1; }
+   audio_mixer_init(48000);
+   settings.bools.menu_thumbnail_preview_audio = true;
+   gfx_anim_preview_audio_begin(p);
+   failed = !p->audio_dt || !voice;
+   if (p->audio_dt && size > 8 * 1024 * 1024
+         && data_transfer_window_is_reserved(p->audio_dt)
+         && data_transfer_window_resident(p->audio_dt) >= size)
+      failed = 1;
+   for (i = 0; i < 2048 && voice; i++)
+   {
+      size_t j;
+      if (!gfx_anim_preview_audio_feed(p)) { failed = 1; break; }
+      memset(block, 0, sizeof(block));
+      audio_mixer_mix(block, 64, 1.0f, false);
+      for (j = 0; j < 128; j++) energy += block[j] * block[j];
+   }
+   failed |= energy <= 0;
+   gfx_anim_preview_release(p);
+   audio_mixer_done();
+   rmp4_close(demux);
+   free(data);
+   printf("normal windowed MP4 startup: energy=%g blocks=%lu %s\n", energy, (unsigned long)i, failed ? "FAIL" : "PASS");
+   return failed;
+}
+
 static int prepared_session(const char *path, bool s16, bool webm,
       int64_t target_us, int track)
 {
@@ -433,6 +482,7 @@ static int prepared_session(const char *path, bool s16, bool webm,
    data = (uint8_t*)malloc(size);
    if (!data || fread(data, 1, size, file) != size) goto done;
    if (webm) type = audio_transfer_webm_audio_track_type(data, size, track);
+   else type = audio_transfer_mp4_audio_track_type(data, size, size, track);
    reference = audio_transfer_new(type);
    if (!reference) goto done;
    audio_transfer_set_buffer_ptr(reference, type, data, size);
@@ -1159,6 +1209,14 @@ int main(int argc, char **argv)
       return prepared_session(argv[3], false, selected_webm, 50000, 2)
          | prepared_session(argv[3], true, selected_webm, 50000, 2);
    }
+   if (argc == 3 && !strcmp(argv[1], "--ac3-seek"))
+      return prepared_session(argv[2], false, false, 3000000, -1)
+         | prepared_session(argv[2], true, false, 1000000, -1);
+   if (argc == 3 && !strcmp(argv[1], "--startup"))
+      return startup_session(argv[2]);
+   if (argc == 3 && !strcmp(argv[1], "--ac3"))
+      return prepared_session(argv[2], false, false, 50000, -1)
+         | prepared_session(argv[2], true, false, 50000, -1);
    if (argc == 2 && !strcmp(argv[1], "--seek-batch")) return bounded_video_seek();
    failed |= bounded_video_seek();
    if (argc == 3 && !strcmp(argv[1], "--continuous-webm"))

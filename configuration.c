@@ -329,6 +329,7 @@ enum menu_driver_enum
    MENU_XMB,
    MENU_STRIPES,
    MENU_OZONE,
+   MENU_PIX16,
    MENU_NULL
 };
 
@@ -491,6 +492,8 @@ static const enum video_driver_enum VIDEO_DEFAULT_DRIVER = VIDEO_METAL;
 static const enum video_driver_enum VIDEO_DEFAULT_DRIVER = VIDEO_D3D11;
 #elif defined(HAVE_GXM)
 static const enum video_driver_enum VIDEO_DEFAULT_DRIVER = VIDEO_GXM;
+#elif defined(__SWITCH2__) && defined(HAVE_VULKAN)
+static const enum video_driver_enum VIDEO_DEFAULT_DRIVER = VIDEO_VULKAN;
 #elif defined(HAVE_OPENGL) || defined(HAVE_OPENGLES) || defined(HAVE_PSGL)
 static const enum video_driver_enum VIDEO_DEFAULT_DRIVER = VIDEO_GL;
 #elif defined(HAVE_OPENGL_CORE) && !defined(__HAIKU__)
@@ -1901,6 +1904,9 @@ const char *config_get_default_menu(void)
 
    if (*g_defaults.settings_menu)
       return g_defaults.settings_menu;
+#ifdef HAVE_PIX16
+   return "pix16";
+#endif
 
    switch (default_driver)
    {
@@ -1914,6 +1920,8 @@ const char *config_get_default_menu(void)
          return "xmb";
       case MENU_STRIPES:
          return "stripes";
+      case MENU_PIX16:
+         return "pix16";
       case MENU_NULL:
          break;
    }
@@ -2005,6 +2013,9 @@ static struct config_array_setting *populate_settings_array(
    if (!tmp)
       return NULL;
 
+#ifdef HAVE_PYROWAVE
+   SETTING_ARRAY("pyrowave_device_name", settings->arrays.pyrowave_device_name, false, NULL, true);
+#endif
    /* Arrays */
    SETTING_ARRAY("audio_driver",                 settings->arrays.audio_driver, false, NULL, true);
 #ifdef HAVE_COMPANION_WIMP
@@ -2192,6 +2203,9 @@ static struct config_path_setting *populate_settings_path(
    SETTING_PATH("core_updater_buildbot_cores_url",  settings->paths.network_buildbot_url, false, NULL, true);
    SETTING_PATH("core_updater_buildbot_assets_url", settings->paths.network_buildbot_assets_url, false, NULL, true);
    SETTING_PATH("libretro_directory",            settings->paths.directory_libretro, false, NULL, false);
+#ifdef HAVE_PYROWAVE
+   SETTING_PATH("pyrowave_shader_directory", settings->paths.directory_pyrowave_shaders, false, NULL, true);
+#endif
    SETTING_PATH("core_options_path",             settings->paths.path_core_options, false, NULL, true);
    SETTING_PATH("libretro_info_path",            settings->paths.path_libretro_info, false, NULL, true);
    SETTING_PATH("playlist_directory",            settings->paths.directory_playlist, true, NULL, true);
@@ -3100,8 +3114,12 @@ static struct config_bool_setting *populate_settings_bool(
    SETTING_BOOL("menu_swap_ok_cancel_buttons",   &settings->bools.input_menu_swap_ok_cancel_buttons, true, DEFAULT_MENU_SWAP_OK_CANCEL_BUTTONS, false);
    SETTING_BOOL("menu_swap_scroll_buttons",      &settings->bools.input_menu_swap_scroll_buttons, true, DEFAULT_MENU_SWAP_SCROLL_BUTTONS, false);
 #endif
+#ifdef ANDROID
    SETTING_BOOL("input_android_system_keyboard", &settings->bools.input_android_system_keyboard, true, DEFAULT_INPUT_ANDROID_SYSTEM_KEYBOARD, false);
+#endif
+#ifdef HAVE_SDL3
    SETTING_BOOL("input_sdl3_system_keyboard",    &settings->bools.input_sdl3_system_keyboard, true, DEFAULT_INPUT_SDL3_SYSTEM_KEYBOARD, false);
+#endif
 
 
 
@@ -6825,7 +6843,8 @@ static bool check_menu_driver_compatibility(settings_t *settings)
              || (memcmp(video_driver, "d3d9_cg",  7) == 0 && video_driver[7]  == '\0')
              || (memcmp(video_driver, "d3d10",    5) == 0 && video_driver[5]  == '\0')
              || (memcmp(video_driver, "d3d11",    5) == 0 && video_driver[5]  == '\0')
-             || (memcmp(video_driver, "d3d12",    5) == 0 && video_driver[5]  == '\0');
+             || (memcmp(video_driver, "d3d12",    5) == 0 && video_driver[5]  == '\0')
+             || (memcmp(video_driver, "deko3d",   6) == 0 && video_driver[6]  == '\0');
       case 'g':
          if (video_driver[1] == 'l')
             return (memcmp(video_driver, "gl",     2) == 0 && video_driver[2] == '\0')
@@ -6854,7 +6873,8 @@ static bool check_menu_driver_compatibility(settings_t *settings)
           * of the runtime SDL version. sdl3 always has
           * SDL_RenderGeometry. */
          return (memcmp(video_driver, "sdl2",   4) == 0 && video_driver[4] == '\0')
-             || (memcmp(video_driver, "sdl3",   4) == 0 && video_driver[4] == '\0');
+             || (memcmp(video_driver, "sdl3",   4) == 0 && video_driver[4] == '\0')
+             || (memcmp(video_driver, "switch", 6) == 0 && video_driver[6] == '\0');
       case 'c':
          return (memcmp(video_driver, "ctr",    3) == 0 && video_driver[3] == '\0');
       default:

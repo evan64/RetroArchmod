@@ -598,6 +598,7 @@ struct ozone_handle
       gfx_thumbnail_t right;  /* uintptr_t alignment */
       gfx_thumbnail_t left;   /* uintptr_t alignment */
       gfx_thumbnail_t savestate;
+      gfx_thumbnail_t camera;  /* Settings > Camera > Preview */
       float stream_delay;
       enum ozone_pending_thumbnail_type pending;
    } thumbnails;
@@ -2353,6 +2354,9 @@ static uintptr_t ozone_entries_icon_get_texture(
       case MENU_ENUM_LABEL_RECORDING_SETTINGS:
       case MENU_ENUM_LABEL_DEFERRED_RECORDING_SETTINGS_LIST:
       case MENU_ENUM_LABEL_SETTINGS_SHOW_RECORDING:
+      case MENU_ENUM_LABEL_CAMERA_SETTINGS:
+      case MENU_ENUM_LABEL_DEFERRED_CAMERA_SETTINGS_LIST:
+      case MENU_ENUM_LABEL_CAMERA_PREVIEW:
             return icons_tex[OZONE_ENTRIES_ICONS_TEXTURE_RECORD];
       case MENU_ENUM_LABEL_QUICK_MENU_START_STREAMING:
       case MENU_ENUM_LABEL_QUICK_MENU_SHOW_START_STREAMING:
@@ -2392,6 +2396,7 @@ static uintptr_t ozone_entries_icon_get_texture(
       case MENU_ENUM_LABEL_QUICK_MENU_SHOW_CORE_OPTIONS_FLUSH:
             return icons_tex[OZONE_ENTRIES_ICONS_TEXTURE_FILE];
       case MENU_ENUM_LABEL_CORE_SIGNATURE_CHECK:
+      case MENU_ENUM_LABEL_CORE_TRUST:
       case MENU_ENUM_LABEL_CORE_LOCK:
       case MENU_ENUM_LABEL_CORE_SET_STANDALONE_EXEMPT:
             return icons_tex[OZONE_ENTRIES_ICONS_TEXTURE_CORE];
@@ -2565,6 +2570,7 @@ static uintptr_t ozone_entries_icon_get_texture(
       case FILE_TYPE_DIRECTORY:
          return icons_tex[OZONE_ENTRIES_ICONS_TEXTURE_FOLDER];
       case FILE_TYPE_USE_DIRECTORY:
+      case FILE_TYPE_VULKAN_DRIVER_SYSTEM:
          return icons_tex[OZONE_ENTRIES_ICONS_TEXTURE_CHECKMARK];
       case FILE_TYPE_PLAIN:
       case FILE_TYPE_IN_CARCHIVE:
@@ -7005,7 +7011,7 @@ static void ozone_draw_thumbnail_bar(
    {
       gfx_thumbnail_t *preview = ozone->thumbnails.right.status == GFX_THUMBNAIL_STATUS_AVAILABLE
          ? &ozone->thumbnails.right : &ozone->thumbnails.left;
-      gfx_thumbnail_draw(userdata, video_dims, preview,
+      gfx_thumbnail_draw_shader(userdata, video_dims, preview,
             (float)thumbnail_x_position,
             (float)(ozone->dimensions.header_height + ozone->dimensions.sidebar_gradient_height),
             VIDEO_SCALE_PACK(thumbnail_width, sidebar_height),
@@ -7614,9 +7620,11 @@ OZONE_NOINLINE static void ozone_draw_osk(
    unsigned bottom_end            = video_height / 2;
    unsigned y_offset              = 0;
    bool draw_placeholder          = !str || !*str;
-   bool text_selected             = input_driver_keyboard_line_selected();
+   unsigned kb_state              = input_driver_keyboard_line_state();
+   bool text_selected             = (kb_state & INPUT_KEYBOARD_LINE_SELECTED) != 0;
    float selection_color[16];
    unsigned cursor_line           = 0;
+   size_t cursor_col              = 0;
    int cursor_x                   = -2;
    retro_time_t current_time      = menu_driver_get_current_time();
    const char *line               = NULL;
@@ -7743,7 +7751,9 @@ OZONE_NOINLINE static void ozone_draw_osk(
    {
       char cursor_src[2048];
       char cursor_message[2048];
+      const char *nl;
       size_t ptr = line_cursor;
+      size_t wrapped_len;
 
       if (ptr >= sizeof(cursor_src))
          ptr = sizeof(cursor_src) - 1;
@@ -7755,7 +7765,7 @@ OZONE_NOINLINE static void ozone_draw_osk(
        * variant), so stage the source separately */
       memcpy(cursor_src, line_text, ptr);
       cursor_src[ptr] = '\0';
-      (ozone->word_wrap)(cursor_message,
+      wrapped_len = (ozone->word_wrap)(cursor_message,
             sizeof(cursor_message),
             cursor_src,
             ptr,
@@ -7763,10 +7773,16 @@ OZONE_NOINLINE static void ozone_draw_osk(
             ozone->fonts.entries_label.wideglyph_width,
             0);
 
-      cursor_line = string_count_occurrences_single_character(cursor_message, '\n');
-      line        = strrchr(cursor_message, '\n');
-      line        = line ? line + 1 : cursor_message;
-      cursor_x    = font_driver_get_message_width(ozone->fonts.entries_label.font, line, strlen(line), 1.0f);
+      /* The caret's line and column in one walk of the wrap */
+      line = cursor_message;
+      while ((nl = (const char*)memchr(line, '\n',
+                  wrapped_len - (size_t)(line - cursor_message))))
+      {
+         cursor_line++;
+         line = nl + 1;
+      }
+      cursor_col  = wrapped_len - (size_t)(line - cursor_message);
+      cursor_x    = font_driver_get_message_width(ozone->fonts.entries_label.font, line, cursor_col, 1.0f);
    }
 
    (ozone->word_wrap)(message,
@@ -7830,9 +7846,14 @@ OZONE_NOINLINE static void ozone_draw_osk(
             1.0f,
             false);
 
-      /* Cursor/caret */
+      /* Cursor/caret: among Hebrew or Arabic, where it lands as drawn */
       if (!text_selected && (i == cursor_line)
             && (ozone->flags & OZONE_FLAG_OSK_CURSOR))
+      {
+         if (kb_state & INPUT_KEYBOARD_LINE_RTL)
+            cursor_x = font_driver_get_caret_x(
+                  ozone->fonts.entries_label.font, line_buf, _len,
+                  cursor_col, 1.0f);
          gfx_display_draw_quad(
                p_disp,
                userdata,
@@ -7851,6 +7872,7 @@ OZONE_NOINLINE static void ozone_draw_osk(
                video_dims,
                ozone->pure_white,
                NULL);
+      }
 
       if (i != list_size - 1)
          y_offset += (ozone->fonts.entries_label.line_height * 2) * scale_factor;
@@ -8836,7 +8858,7 @@ OZONE_NOINLINE static void ozone_draw_fullscreen_thumbnails(
                NULL);
 
          /* Thumbnail */
-         gfx_thumbnail_draw(
+         gfx_thumbnail_draw_shader(
                userdata,
                video_dims,
                right_thumbnail,
@@ -8872,7 +8894,7 @@ OZONE_NOINLINE static void ozone_draw_fullscreen_thumbnails(
                NULL);
 
          /* Thumbnail */
-         gfx_thumbnail_draw(
+         gfx_thumbnail_draw_shader(
                userdata,
                video_dims,
                left_thumbnail,
@@ -11149,6 +11171,7 @@ static void ozone_unload_thumbnail_textures(void *data)
    gfx_thumbnail_reset(&ozone->thumbnails.right);
    gfx_thumbnail_reset(&ozone->thumbnails.left);
    gfx_thumbnail_reset(&ozone->thumbnails.savestate);
+   gfx_thumbnail_reset(&ozone->thumbnails.camera);
 }
 
 static INLINE void ozone_font_free(font_data_impl_t *font_data)
@@ -12257,18 +12280,14 @@ OZONE_NOINLINE static void ozone_draw_header(
    /* Timedate */
    if (timedate_enable)
    {
-      gfx_display_ctx_datetime_t datetime;
-      char timedate[256];
-      float icon_width  = 35 * scale_factor;
-      float text_offset = ozone->dimensions.entry_spacing * 3.0f;
+      float icon_width     = 35 * scale_factor;
+      float text_offset    = ozone->dimensions.entry_spacing * 3.0f;
+      const char *timedate = menu_display_timedate(
+            video_info->menu.timedate_style,
+            video_info->menu.timedate_date_separator, NULL, NULL);
 
       if (!timedate_offset)
          timedate_offset = header_margin;
-
-      datetime.time_mode      = video_info->menu.timedate_style;
-      datetime.date_separator = video_info->menu.timedate_date_separator;
-
-      menu_display_timedate(&datetime, timedate, sizeof(timedate));
 
       gfx_display_draw_text(
             ozone->fonts.time.font,
@@ -13662,6 +13681,22 @@ static void ozone_frame(void *data, video_frame_info_t *video_info)
             libretro_running,
             menu_framebuffer_opacity,
             &mymat);
+
+   /* The camera preview, at the foot of the entries: the camera page
+    * is a few entries tall. */
+   if (     !(ozone->flags2 & OZONE_FLAG2_SHOW_FULLSCREEN_THUMBNAILS)
+         && menu_camera_preview_update(&ozone->thumbnails.camera))
+   {
+      unsigned w = (unsigned)(video_width * 0.4f);
+      unsigned h = w * 3 / 4;
+      int margin = ozone->dimensions.entry_padding_horizontal_full;
+      menu_camera_preview_draw(&ozone->thumbnails.camera, userdata,
+            VIDEO_SCALE_PACK(video_width, video_height),
+            (float)((int)video_width - (int)w - margin),
+            (float)((int)video_height - ozone->dimensions.footer_height
+               - (int)h - margin),
+            VIDEO_SCALE_PACK(w, h));
+   }
 
    if (dispctx && dispctx->scissor_end)
       dispctx->scissor_end(userdata, VIDEO_SCALE_PACK(video_width,

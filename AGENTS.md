@@ -17,6 +17,16 @@ Subdirectories with rules of their own carry their own AGENTS.md.
 `tools/compile_commands.py`, after ./configure, writes compile_commands.json
 for clangd and other code navigation.
 
+## Build dependencies
+
+Normal RetroArch builds must not require Python. In particular, do not add
+Python dependencies for shader generation, embedding or validation. Commit
+the precompiled shader assets and the C headers needed to embed them, and
+compile those committed files directly.
+Keep regeneration and asset validation in explicit developer tools and CI;
+never run them implicitly from ordinary Make or MSBuild targets. Do not fix
+a missing Python error by adding Python as a normal build dependency.
+
 ## Copies
 
 Remove a copy wherever one can be removed, on every change: look for one
@@ -31,6 +41,28 @@ each time a data path is written or touched, not only when asked.
 - Keep a copy only where nothing else can work (the owner frees or rewrites
   the memory before the reader is done, or uncached memory would be read
   back).
+
+## Real time
+
+RetroArch is a soft real-time system. The main, video and audio paths
+must stay within a frame's budget, and a lock, a sleep or a blocking wait
+on them shows up as jitter, audio underruns or extra frames of latency -
+which run-ahead, hard sync and the low-latency modes cannot absorb.
+
+The primitives allowed are the ones the concurrency actually needs:
+
+- SPSC rings for a producer-consumer handoff (core to video, the audio
+  callbacks and the like).
+- Atomics for flags and simple shared state.
+- Eventcounts for a wait that neither spins nor puts a sleep in front of
+  the caller.
+
+Spinlocks and busy-waiting are out: they burn power, hurt the caches and
+invert priorities. Needing to block means the design is wrong; reshape it
+around lends and borrows, slots allocated ahead and progress that never
+waits, as the Copies section does for data. Pacing follows the same rule:
+frames are timed by the audio clock or the display's vsync, never by
+wall-clock sleeps, so nothing drifts and no latency is added.
 
 ## Threads
 
@@ -228,6 +260,9 @@ The runner image moves under the tree: Ubuntu releases bring new Mesa, Wine, ffm
 Nothing built is ever committed: no executables, objects, libraries,
 archives, generated images or captures. This includes every sample and
 tool harness built under samples/, libretro-common/samples/ and tools/.
+
+Committed shader bytecode and its C embedding headers are the intentional
+exception described under Build dependencies.
 
 - Stage files by name (`git add path/file.c`), never a directory or
   `git add -A`, so a build that ran after a `make clean` cannot slip in.

@@ -369,6 +369,8 @@ typedef struct xmb_handle
    retro_time_t current_menu_icon_retry_until;
 
    char *bg_file_path;
+   /* The font the clock's cached width was measured with */
+   const void *timedate_font;
 
    file_list_t horizontal_list;   /* ptr alignment */
    /* Maps console tabs to playlist database names */
@@ -418,6 +420,7 @@ typedef struct xmb_handle
       gfx_thumbnail_t left;
       gfx_thumbnail_t icon;
       gfx_thumbnail_t savestate;
+      gfx_thumbnail_t camera;      /* Settings > Camera > Preview */
       enum xmb_pending_thumbnail_type pending;
       enum xmb_pending_thumbnail_type pending_icons;
    } thumbnails;
@@ -456,6 +459,10 @@ typedef struct xmb_handle
    unsigned categories_active_idx;
    unsigned categories_active_idx_old;
    unsigned ticker_limit;
+   /* The clock's width, at timedate_gen with timedate_font at
+    * timedate_font_size; drawing thread only */
+   unsigned timedate_gen;
+   int timedate_width;
 
    float fullscreen_thumbnail_alpha;
    float x;
@@ -468,6 +475,8 @@ typedef struct xmb_handle
    float shadow_offset;
    float font_size;
    float font2_size;
+   /* The font size the clock's cached width was measured at */
+   float timedate_font_size;
    float last_scale_factor;
    /* Snapshot of menu_scale_factor clamped to a floor of 1, taken by
     * xmb_layout() at the same time as scale_mod and the margins. The
@@ -1368,7 +1377,8 @@ XMB_NOINLINE static void xmb_render_messagebox_internal(
    int slice_y                         = 0;
    int slice_w                         = 0;
    int slice_h                         = 0;
-   bool draw_selection = draw_caret && input_driver_keyboard_line_selected();
+   unsigned kb_state   = draw_caret ? input_driver_keyboard_line_state() : 0;
+   bool draw_selection = (kb_state & INPUT_KEYBOARD_LINE_SELECTED) != 0;
    unsigned selection_first_line = 1;
    float selection_color[16] = {
       0.20f, 0.40f, 0.80f, 0.35f,
@@ -1571,9 +1581,10 @@ XMB_NOINLINE static void xmb_render_messagebox_internal(
 
       if (keep_wrap)
       {
-         /* The input dialog may hand back the kept text itself */
+         /* The input dialog may hand back the kept text itself, and
+          * the box measures what it is handed by its terminator */
          if (message != xmb->box_wrap.text)
-            memcpy(xmb->box_wrap.text, message, msg_len);
+            memcpy(xmb->box_wrap.text, message, msg_len + 1);
          xmb->box_wrap.font            = xmb->font;
          xmb->box_wrap.font_generation = font_generation;
          xmb->box_wrap.font_size       = xmb->font_size;
@@ -1655,8 +1666,10 @@ XMB_NOINLINE static void xmb_render_messagebox_internal(
          if (d > (n = strlen(lines[l])))
             d = n;
          cursor_line = l;
-         cursor_x    = font_driver_get_message_width(xmb->font, lines[l], d,
-               1.0f);
+         /* Among Hebrew or Arabic, where the caret lands as drawn */
+         cursor_x    = (kb_state & INPUT_KEYBOARD_LINE_RTL)
+            ? font_driver_get_caret_x(xmb->font, lines[l], n, d, 1.0f)
+            : font_driver_get_message_width(xmb->font, lines[l], d, 1.0f);
 
          draw_caret  = !draw_selection;
       }
@@ -2342,6 +2355,7 @@ static void xmb_unload_thumbnail_textures(void *data)
    gfx_thumbnail_reset(&xmb->thumbnails.left);
    gfx_thumbnail_reset(&xmb->thumbnails.icon);
    gfx_thumbnail_reset(&xmb->thumbnails.savestate);
+   gfx_thumbnail_reset(&xmb->thumbnails.camera);
 }
 
 static void xmb_unload_icon_thumbnail_textures(void *xmb_handle_ptr)
@@ -4903,6 +4917,8 @@ static uintptr_t xmb_icon_get_id(xmb_handle_t *xmb,
       case MENU_ENUM_LABEL_QUICK_MENU_SHOW_START_RECORDING:
       case MENU_ENUM_LABEL_RECORDING_SETTINGS:
       case MENU_ENUM_LABEL_SETTINGS_SHOW_RECORDING:
+      case MENU_ENUM_LABEL_CAMERA_SETTINGS:
+      case MENU_ENUM_LABEL_CAMERA_PREVIEW:
          return GFX_SURFACE_HANDLE(xmb->textures.list[XMB_TEXTURE_RECORD]);
       case MENU_ENUM_LABEL_QUICK_MENU_START_STREAMING:
       case MENU_ENUM_LABEL_QUICK_MENU_SHOW_START_STREAMING:
@@ -4942,6 +4958,7 @@ static uintptr_t xmb_icon_get_id(xmb_handle_t *xmb,
       case MENU_ENUM_LABEL_QUICK_MENU_SHOW_CORE_OPTIONS_FLUSH:
          return GFX_SURFACE_HANDLE(xmb->textures.list[XMB_TEXTURE_FILE]);
       case MENU_ENUM_LABEL_CORE_SIGNATURE_CHECK:
+      case MENU_ENUM_LABEL_CORE_TRUST:
       case MENU_ENUM_LABEL_CORE_LOCK:
       case MENU_ENUM_LABEL_CORE_SET_STANDALONE_EXEMPT:
          return GFX_SURFACE_HANDLE(xmb->textures.list[XMB_TEXTURE_CORE]);
@@ -5131,6 +5148,7 @@ static uintptr_t xmb_icon_get_id(xmb_handle_t *xmb,
       case FILE_TYPE_SHADER_PRESET:
          return GFX_SURFACE_HANDLE(xmb->textures.list[XMB_TEXTURE_SHADER_OPTIONS]);
       case FILE_TYPE_USE_DIRECTORY:
+      case FILE_TYPE_VULKAN_DRIVER_SYSTEM:
          return GFX_SURFACE_HANDLE(xmb->textures.list[XMB_TEXTURE_CHECKMARK]);
       case FILE_TYPE_CARCHIVE:
          return GFX_SURFACE_HANDLE(xmb->textures.list[XMB_TEXTURE_ZIP]);
@@ -8850,7 +8868,7 @@ XMB_NOINLINE static void xmb_draw_fullscreen_thumbnails(
                NULL);
 
          /* Thumbnail */
-         gfx_thumbnail_draw(
+         gfx_thumbnail_draw_shader(
                userdata,
                video_dims,
                right_thumbnail,
@@ -8886,7 +8904,7 @@ XMB_NOINLINE static void xmb_draw_fullscreen_thumbnails(
                NULL);
 
          /* Thumbnail */
-         gfx_thumbnail_draw(
+         gfx_thumbnail_draw_shader(
                userdata,
                video_dims,
                left_thumbnail,
@@ -9392,6 +9410,22 @@ static void xmb_frame(void *data, video_frame_info_t *video_info)
          &&  xmb->want_fullscreen_thumbnails)
       xmb_show_fullscreen_thumbnails(xmb, menu_st, menu_st->selection_ptr);
 
+   /* The camera preview, where a save state thumbnail would be */
+   if (     !xmb->show_fullscreen_thumbnails
+         && menu_camera_preview_update(&xmb->thumbnails.camera))
+   {
+      float thumb_width         = right_thumbnail_margin_width;
+      float thumb_height        = thumb_width - (thumb_width / 4);
+      float scaled_thumb_width  = thumb_width * thumbnail_scale_factor;
+      float scaled_thumb_height = thumb_height * thumbnail_scale_factor;
+      menu_camera_preview_draw(&xmb->thumbnails.camera, userdata,
+            video_info->dims,
+            right_thumbnail_margin_x + ((thumb_width - scaled_thumb_width) / 2.0f),
+            (video_height - scaled_thumb_height) / 2.0f,
+            VIDEO_SCALE_PACK(scaled_thumb_width  > 0.0f ? (unsigned)scaled_thumb_width  : 0,
+                             scaled_thumb_height > 0.0f ? (unsigned)scaled_thumb_height : 0));
+   }
+
    /* Save state thumbnail, right side in PS3 layout, left in PSP layout */
    if (     (xmb->is_quick_menu || xmb->is_state_slot)
          && *xmb->savestate_thumbnail_file_path
@@ -9822,9 +9856,9 @@ static void xmb_frame(void *data, video_frame_info_t *video_info)
    /* Clock */
    if (timedate_enable)
    {
-      gfx_display_ctx_datetime_t datetime;
-      char timedate[256];
+      const char *timedate;
       size_t _len        = 0;
+      unsigned gen       = 0;
       size_t x_pos       = 0;
       float scale_factor = xmb->scale_cap;
       float icon_size    = (!xmb->assets_missing) ? xmb->icon_size * 0.90f : 0;
@@ -9864,12 +9898,21 @@ static void xmb_frame(void *data, video_frame_info_t *video_info)
          gfx_display_blend_end(dispctx, userdata);
       }
 
-      datetime.time_mode      = video_info->menu.timedate_style;
-      datetime.date_separator = video_info->menu.timedate_date_separator;
-      _len = menu_display_timedate(&datetime, timedate, sizeof(timedate));
+      timedate = menu_display_timedate(video_info->menu.timedate_style,
+            video_info->menu.timedate_date_separator, &_len, &gen);
 
-      title_header_max_width = x_pos + font_driver_get_message_width(
-            xmb->font, timedate, _len, 1.0f);
+      /* Measured again only when the text or the font changes */
+      if (     gen                 != xmb->timedate_gen
+            || (const void*)xmb->font != xmb->timedate_font
+            || xmb->font_size      != xmb->timedate_font_size)
+      {
+         xmb->timedate_width     = font_driver_get_message_width(
+               xmb->font, timedate, _len, 1.0f);
+         xmb->timedate_gen       = gen;
+         xmb->timedate_font      = xmb->font;
+         xmb->timedate_font_size = xmb->font_size;
+      }
+      title_header_max_width = x_pos + xmb->timedate_width;
 
       xmb_draw_text(shadows_enable, xmb, video_info, timedate,
             video_width - xmb->margins_title_left - x_pos
@@ -10023,7 +10066,7 @@ static void xmb_frame(void *data, video_frame_info_t *video_info)
       unsigned preview_height = video_height / 2;
       gfx_thumbnail_t *preview = xmb->thumbnails.right.status == GFX_THUMBNAIL_STATUS_AVAILABLE
          ? &xmb->thumbnails.right : &xmb->thumbnails.left;
-      gfx_thumbnail_draw(userdata, video_info->dims, preview,
+      gfx_thumbnail_draw_shader(userdata, video_info->dims, preview,
             (float)(video_width - preview_width), (float)(video_height / 4),
             VIDEO_SCALE_PACK(preview_width, preview_height),
             GFX_THUMBNAIL_ALIGN_CENTRE, 1.0f, 1.0f, NULL);

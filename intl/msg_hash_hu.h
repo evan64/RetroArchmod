@@ -257,7 +257,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    char s_e011fe61[42];
 #endif
-   char s_4e447c6c[49];
    char s_d9a51d02[22];
    char s_12e77e8f[26];
    char s_98760b94[31];
@@ -339,7 +338,9 @@ static const struct
    char s_314539a4[18];
    char s_8fc168f0[15];
    char s_213c44cf[23];
+   char s_4f4b0d00[8];
    char s_502f623c[7];
+   char s_223dfc81[7];
    char s_b6cd2ff0[47];
    char s_40e7aacd[10];
    char s_fe2b08f2[13];
@@ -1151,9 +1152,7 @@ static const struct
    char s_dcbf8b04[28];
    char s_dcbffdfe[30];
    char s_7816d5d5[30];
-   char s_2b1f17e8[39];
    char s_36c3acc7[27];
-   char s_b4c3612a[38];
    char s_f638f238[25];
    char s_f3358a59[33];
    char s_0d7d9688[32];
@@ -2031,6 +2030,8 @@ static const struct
    char s_579c3ea7[31];
    char s_cc7bf1b9[14];
    char s_b300fc03[22];
+   char s_e29ee11f[12];
+   char s_714b59b6[6];
    char s_ccf131c5[25];
    char s_e5124bba[12];
    char s_875bc33e[15];
@@ -2944,9 +2945,7 @@ static const struct
    char s_c5a76d72[60];
    char s_c5a7e06c[62];
    char s_37d36d03[63];
-   char s_eadbaf16[71];
    char s_54eaf5f5[46];
-   char s_7de5d198[70];
    char s_3b573ee6[43];
    char s_dc1d6cc7[57];
    char s_aebcb136[154];
@@ -4682,7 +4681,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    "Mag \303\272jrat\303\266lt\303\251se tartalom futtat\303\241sakor",
 #endif
-   "Ker\303\274l\305\221 megold\303\241s az Androidos lecsatlakoz\303\241sra",
    "Az alkalmaz\303\241s ikonja",
    "Be\303\251p\303\255tett m\303\251diaf\303\241jlok",
    "ASIO vez\303\251rl\305\221pult megnyit\303\241sa",
@@ -4766,6 +4764,8 @@ static const struct
    "Csomagazonos\303\255t\303\263",
    "\303\201tmeneti t\303\241r",
    "Kamera enged\303\251lyez\303\251se",
+   "Eszk\303\266z",
+   "Kamera",
    "Kamera",
    "A tr\303\263fe\303\241k nem aktiv\303\241lhat\303\263ak ezzel a maggal",
    "Csal\303\241sok",
@@ -5590,9 +5590,7 @@ static const struct
    "\"Mag bet\303\266lt\303\251se\" l\303\241that\303\263",
    "\"Lemez bet\303\266lt\303\251se\" l\303\241that\303\263",
    "\"Online friss\303\255t\305\221\" l\303\241that\303\263",
-   "\"Kil\303\251p\303\251s a RetroArch-b\303\263l\" l\303\241that\303\263",
    "\"\303\232jraind\303\255t\303\241s\" l\303\241that\303\263",
-   "\"RetroArch \303\272jraind\303\255t\303\241sa\" l\303\241that\303\263",
    "\"Le\303\241ll\303\255t\303\241s\" l\303\241that\303\263",
    "Men\303\274 alc\303\255mk\303\251k megjelen\303\255t\303\251se",
    "Egy kattint\303\241sos j\303\241t\303\251klist\303\241k",
@@ -6505,6 +6503,8 @@ static const struct
    "HH-NN-\303\211\303\211\303\211\303\211 \303\223\303\223:PP (de/du)",
    "HH-NN \303\223\303\223:PP",
    "HH-NN \303\223\303\223:PP (de/du)",
+   "Automatikus",
+   "K\303\251zi",
    "D\303\241tum \303\251s id\305\221 st\303\255lusa",
    "\303\211\303\211\303\211\303\211-HH",
    "\303\211\303\211\303\211\303\211-HH-NN",
@@ -7923,11 +7923,7 @@ static const struct
    "en.",
    "Az \"Online friss\303\255t\305\221\" lehet\305\221s\303\251g jelenjen meg a f\305\221men\303\274"
    "ben.",
-   "A \"Kil\303\251p\303\251s a RetroArch-b\303\263l\" lehet\305\221s\303\251g jelenjen meg a f\305"
-   "\221men\303\274ben.",
    "Az \"\303\232jraind\303\255t\303\241s\" lehet\305\221s\303\251g jelenjen meg.",
-   "A \"RetroArch \303\272jraind\303\255t\303\241sa\" lehet\305\221s\303\251g jelenjen meg a f\305"
-   "\221men\303\274ben.",
    "A \"Le\303\241ll\303\255t\303\241s\" lehet\305\221s\303\251g jelenjen meg.",
    "A men\303\274 elemeihez tov\303\241bbi inform\303\241ci\303\263 megjelen\303\255t\303\251se.",
    "A \"Futtat\303\241s\" men\303\274 kihagy\303\241sa j\303\241t\303\251klist\303\241b\303\263l t"
@@ -9787,7 +9783,7 @@ static const struct
  * compiler that pads this struct fails here instead of
  * misindexing at runtime. */
 typedef char msg_hash_hu_blob_check[
-      (sizeof(msg_hash_hu_blob) == (186725u
+      (sizeof(msg_hash_hu_blob) == (186491u
 #ifdef ANDROID
        + 316u
 #endif
@@ -10470,7 +10466,6 @@ static const msg_hash_id_t msg_hash_hu_ids[] =
 #ifndef HAVE_DYNAMIC
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ALWAYS_RELOAD_CORE_ON_RUN_CONTENT,
 #endif
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ANDROID_INPUT_DISCONNECT_WORKAROUND,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_APPICON_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ASSETS_DIRECTORY,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_AUDIO_ASIO_CONTROL_PANEL,
@@ -10552,7 +10547,9 @@ static const msg_hash_id_t msg_hash_hu_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_BUNDLE_IDENTIFIER,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CACHE_DIRECTORY,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_ALLOW,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DEVICE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DRIVER,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CANNOT_ACTIVATE_ACHIEVEMENTS_WITH_THIS_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT_ADDRESS,
@@ -11364,9 +11361,7 @@ static const msg_hash_id_t msg_hash_hu_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SINGLECLICK_PLAYLISTS,
@@ -12243,6 +12238,8 @@ static const msg_hash_id_t msg_hash_hu_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MDYYYY_HM_AMPM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MD_HM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MD_HM_AMPM,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_AUTOMATIC,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_MANUAL,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_STYLE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YMD,
@@ -13154,9 +13151,7 @@ static const msg_hash_id_t msg_hash_hu_ids[] =
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SINGLECLICK_PLAYLISTS,

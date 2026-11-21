@@ -1489,6 +1489,34 @@ MSG_HASH(
    "Warn before running a core that libretro didn't sign or that has changed since."
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CORE_TRUST,
+   "Core Trust"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_CORE_TRUST,
+   "RetroArch checks this core the next time it loads."
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CORE_TRUST_TRUSTED,
+   "Trusted by you"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_CORE_TRUST_TRUSTED,
+   "Loads without a Security Warning: you chose Always Trust or Install and Trust for it, or it was installed when signature checks started. Select to stop trusting it."
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CORE_TRUST_SIGNED,
+   "Signed by libretro"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_CORE_TRUST_SIGNED,
+   "Loads without a Security Warning because libretro signed it."
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CORE_TRUST_UNCHECKED,
+   "Not checked yet"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_CORE_SET_STANDALONE_EXEMPT,
    "Exclude From 'Contentless Cores' Menu"
    )
@@ -7698,8 +7726,16 @@ MSG_HASH(
    "System"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_VIDEO_VULKAN_DRIVER_PATH_USE_SYSTEM,
+   "<Use System Driver>"
+   )
+MSG_HASH(
    MENU_ENUM_SUBLABEL_VIDEO_VULKAN_DRIVER_PATH_CRASHED,
    "Crashed last run, using System"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_VIDEO_VULKAN_DRIVER_PATH_NOT_USED,
+   "Not used: %s"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_VIDEO_VULKAN_DRIVER_PATH_SAFE_MODE,
@@ -7709,6 +7745,26 @@ MSG_HASH(
    MENU_ENUM_SUBLABEL_VIDEO_VULKAN_DRIVER_PATH_SAFE_MODE,
    "%s is used again at the next normal start"
    )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_VIDEO_VULKAN_DRIVER_PATH_FROM,
+   "From %s"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_VIDEO_VULKAN_DRIVER_PATH_ICD,
+   "Use another Vulkan driver: pick its .json, from share/vulkan/icd.d.\nOnly use drivers from a source you trust. Applies the next time Vulkan starts.\nStart: system driver. One run without it: --vulkan-driver=system"
+   )
+#if defined(_WIN32)
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_VIDEO_VULKAN_DRIVER_PATH_ICD_WINDOWS,
+   "Use another Vulkan driver: pick its .json, usually beside its .dll.\nOnly use drivers from a source you trust. Applies the next time Vulkan starts.\nStart: system driver. One run without it: --vulkan-driver=system"
+   )
+#endif
+#if defined(__APPLE__)
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_VIDEO_VULKAN_DRIVER_PATH_ICD_MACOS,
+   "Use another Vulkan driver: pick its .json, from Homebrew's etc/vulkan/icd.d, a MoltenVK release or the Vulkan SDK.\nOnly use drivers from a source you trust. Applies the next time Vulkan starts.\nStart: system driver. One run without it: open -a RetroArch --args --vulkan-driver=system"
+   )
+#endif
 /* GENERATED REGION: HDR toggle group, stereo 3D & screens group and headset group (see settings_def_video_hdr_toggles.h, settings_def_video_stereo.h and settings_def_video_headset.h). */
 #define SETTINGS_DEF_STRINGS_PASS
 #define S_BOOL(f, T, n, d, sd, df, c, us, sub) \
@@ -15177,7 +15233,15 @@ MSG_HASH(MENU_ENUM_LABEL_VALUE_##T, us) \
 MSG_HASH(MENU_ENUM_SUBLABEL_##T, sub)
 #define S_FLOAT_NS(f, T, n, d, rnd, sd, df, c, mn, mx, st, ok, rp, us) \
 MSG_HASH(MENU_ENUM_LABEL_VALUE_##T, us)
+#define S_STRING(f, T, n, d, sd, c, ok, rp, sta, sel, lf, rt, ui, us, sub) \
+MSG_HASH(MENU_ENUM_LABEL_VALUE_##T, us) \
+MSG_HASH(MENU_ENUM_SUBLABEL_##T, sub)
+#define S_DIR(f, T, n, d, el, sd, c, sta, us, sub) \
+MSG_HASH(MENU_ENUM_LABEL_VALUE_##T, us) \
+MSG_HASH(MENU_ENUM_SUBLABEL_##T, sub)
 #include "../settings/settings_def_recording_video.h"
+#undef S_STRING
+#undef S_DIR
 #undef S_BOOL
 #undef S_BOOL_NS
 #undef S_UINT
@@ -18469,7 +18533,7 @@ MSG_HASH(MENU_ENUM_LABEL_VALUE_##T, us)
 #undef SETTINGS_DEF_STRINGS_PASS
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_MENU_SHOW_QUIT_RETROARCH,
-   "Show 'Quit RetroArch'"
+   "Show 'Quit'"
    )
 /* GENERATED REGION: restart visibility setting (see settings_def_menu_show_restart.h). */
 #define SETTINGS_DEF_STRINGS_PASS
@@ -23767,7 +23831,14 @@ MSG_HASH(MENU_ENUM_LABEL_VALUE_##T, us) \
 MSG_HASH(MENU_ENUM_SUBLABEL_##T, sub)
 #define S_FLOAT_NS(f, T, n, d, rnd, sd, df, c, mn, mx, st, ok, rp, us) \
 MSG_HASH(MENU_ENUM_LABEL_VALUE_##T, us)
+#define S_STRING(f, T, n, d, sd, c, ok, rp, sta, sel, lf, rt, ui, us, sub) \
+MSG_HASH(MENU_ENUM_LABEL_VALUE_##T, us) \
+MSG_HASH(MENU_ENUM_SUBLABEL_##T, sub)
+#define S_STRING_NS(f, T, n, d, sd, c, ok, rp, sta, sel, lf, rt, ui, us) \
+MSG_HASH(MENU_ENUM_LABEL_VALUE_##T, us)
 #include "../settings/settings_def_privacy_camera.h"
+#undef S_STRING
+#undef S_STRING_NS
 #undef S_BOOL
 #undef S_BOOL_NS
 #undef S_UINT
@@ -27727,6 +27798,14 @@ MSG_HASH(
    "HH:MM (AM/PM)"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_AUTOMATIC,
+   "Automatic"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_MANUAL,
+   "Manual"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_TIMEDATE_AGO,
    "Ago"
    )
@@ -29042,8 +29121,76 @@ MSG_HASH(
    "Zoom Flash"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_IRIS,
+   "Iris"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_WIPE,
+   "Scan Wipe"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_DISSOLVE,
+   "Dissolve"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_SPLIT,
+   "Split"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_BLAST,
+   "Blast"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_ROLL,
+   "Roll"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_STATIC,
+   "Static"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_RANDOM,
    "Random"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_DIAMONDS,
+   "Diamonds"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_MODE7,
+   "Mode 7 Floor"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_STARS,
+   "Starfield"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_WAVY,
+   "Heat Wave"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_WATER,
+   "Water"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_CLOUDS,
+   "Clouds"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_PLASMA,
+   "Plasma"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_RAIN,
+   "Rain"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_SNOW,
+   "Snow"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_COPPER,
+   "Copper Bars"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_SIXTEEN,
@@ -29076,6 +29223,34 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_CRIMSON,
    "Crimson"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_COBALT,
+   "Cobalt"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_FOREST,
+   "Forest"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_PLUM,
+   "Plum"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_SAKURA,
+   "Sakura"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_OCEAN,
+   "Ocean"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_COPPER,
+   "Copper"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_MIDNIGHT,
+   "Midnight"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_RGUI_MENU_COLOR_THEME_CUSTOM,
@@ -34245,6 +34420,10 @@ MSG_HASH(
    "Core not loaded: RetroArch couldn't confirm it is safe. To trust it, start RetroArch with a menu, load the core and choose Always Trust."
    )
 MSG_HASH(
+   MSG_CORE_WARNING_ANSWER_FIRST,
+   "Answer the Security Warning first."
+   )
+MSG_HASH(
    MSG_CORE_LOAD_TRUST_LIST_FULL,
    "Core loaded this time only: the trusted cores list is full, so RetroArch couldn't remember it."
    )
@@ -34255,6 +34434,42 @@ MSG_HASH(
 MSG_HASH(
    MSG_CORE_LOAD_REFUSED_SEED_PENDING,
    "Core not loaded: RetroArch is still checking the installed cores. Try again in a moment."
+   )
+MSG_HASH(
+   MSG_CORE_TRUST_FORGOTTEN,
+   "Core no longer trusted: RetroArch checks it the next time it loads."
+   )
+MSG_HASH(
+   MSG_CORE_LOAD_TRUST_CANT_SAVE,
+   "Core trusted for this session only: RetroArch can't save its trusted cores list."
+   )
+MSG_HASH(
+   MSG_CORE_TRUST_SAVE_FAILED,
+   "RetroArch couldn't save its trusted cores list: changes to trusted cores this session won't be kept."
+   )
+MSG_HASH(
+   MSG_CORE_TRUST_FORGOTTEN_CANT_SAVE,
+   "Core no longer trusted for this session only: RetroArch can't save its trusted cores list."
+   )
+MSG_HASH(
+   MSG_CORE_TRUST_NEWER,
+   "This can't be changed now: a newer version of RetroArch saved its list of trusted cores."
+   )
+MSG_HASH(
+   MSG_CORE_WARNING_STORE_UNREADABLE,
+   "RetroArch couldn't read its trusted cores list, so cores you trusted before will ask again."
+   )
+MSG_HASH(
+   MSG_CORE_WARNING_STORE_NEWER,
+   "A newer version of RetroArch saved its trusted cores list, so cores you trusted before will ask again."
+   )
+MSG_HASH(
+   MSG_CORE_INSTALL_TRUST_LIST_FULL,
+   "Core installed, but the trusted cores list is full, so RetroArch will ask again when the core loads."
+   )
+MSG_HASH(
+   MSG_CORE_INSTALL_TRUST_CANT_SAVE,
+   "Core installed and trusted for this session only: RetroArch can't save its trusted cores list."
    )
 MSG_HASH(
    MSG_TO,
@@ -34493,6 +34708,18 @@ MSG_HASH(
    "Game remap file loaded."
    )
 MSG_HASH(
+   MSG_CAMERA_PREVIEW_DISALLOWED,
+   "Camera access is off. Turn on Allow Camera to see the preview."
+   )
+MSG_HASH(
+   MSG_CAMERA_PREVIEW_FAILED,
+   "The camera could not be opened."
+   )
+MSG_HASH(
+   MSG_CAMERA_PREVIEW_CORE_IDLE,
+   "The running core holds the camera but has not started it."
+   )
+MSG_HASH(
    MSG_DIRECTORY_REMAP_FILE_LOADED,
    "Content directory remap file loaded."
    )
@@ -34535,6 +34762,10 @@ MSG_HASH(
 MSG_HASH(
    MSG_RUNAHEAD_FAILED_TO_LOAD_STATE,
    "Failed to load state. Run-Ahead has been disabled."
+   )
+MSG_HASH(
+   MSG_RUNAHEAD_CORE_RESET,
+   "Run-Ahead could not restore the core's state. The core was reset and Run-Ahead has been disabled."
    )
 MSG_HASH(
    MSG_RUNAHEAD_FAILED_TO_CREATE_SECONDARY_INSTANCE,
@@ -34853,12 +35084,8 @@ MSG_HASH(
    "Custom Vulkan driver crashed before and is off for this core. Pick it again to retry."
    )
 MSG_HASH(
-   MSG_VULKAN_CUSTOM_DRIVER_INVALID,
-   "Custom Vulkan driver package is not usable. Using the system driver."
-   )
-MSG_HASH(
    MSG_VULKAN_CUSTOM_DRIVER_UNSUPPORTED,
-   "Custom Vulkan drivers need an Adreno GPU and Android 9. Using the system driver."
+   "Custom Vulkan drivers need Android 9 or newer. Using the system driver."
    )
 MSG_HASH(
    MSG_VULKAN_CUSTOM_DRIVER_RESTART,
@@ -34871,6 +35098,66 @@ MSG_HASH(
 MSG_HASH(
    MSG_VULKAN_CUSTOM_DRIVER_UNTRUSTED,
    "Custom Vulkan driver was not picked in the menu or has changed. Pick it again to use it."
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_INVALID_ICD,
+   "Custom Vulkan driver .json is not usable. Using the system driver."
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_UNSUPPORTED_LOADER,
+   "Custom Vulkan drivers need Vulkan loader 1.3.235 or newer. Using the system driver."
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_XR_UNSUPPORTED,
+   "The headset runtime can't use the custom Vulkan driver. Using the system driver."
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_MISSING_FEATURES,
+   "Custom Vulkan driver lacks features RetroArch needs. Using the system driver."
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_QUARANTINED,
+   "macOS quarantined the custom Vulkan driver; the log says how to clear it. Using the system driver."
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_SDL3_UNSUPPORTED,
+   "The SDL3 context driver can't use a custom Vulkan driver on macOS. Using the system driver."
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_NOT_USED,
+   "Custom Vulkan driver not used: %s. Using the system driver."
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_WHY_PACKAGE,
+   "bad package (%s)"
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_WHY_LIBRARY,
+   "library did not load (%s)"
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_WHY_NO_GPU,
+   "it found no GPU it supports"
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_WHY_NO_GPU_ADRENO,
+   "it found no GPU it supports (this device has an Adreno GPU)"
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_WHY_NO_GPU_MALI,
+   "it found no GPU it supports (this device has a Mali GPU)"
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_WHY_LOADER,
+   "the system Vulkan loader did not use it"
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_WHY_START,
+   "it failed to start (%s)"
+   )
+MSG_HASH(
+   MSG_VULKAN_CUSTOM_DRIVER_WHY_FAILED,
+   "it failed to start"
    )
 MSG_HASH(
    MSG_RESAMPLER_QUALITY_LOWEST,
@@ -40824,4 +41111,34 @@ MSG_HASH(
 MSG_HASH(
    MSG_CORE_FIRMWARE_SUPPLY_MANUALLY,
    "This firmware must be supplied manually."
+   )
+
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PYROWAVE_DEVICES,
+   "PyroWave Devices"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PYROWAVE_SEND,
+   "Send to"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PYROWAVE_ACCEPT,
+   "Accept Incoming PyroWave Stream"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PYROWAVE_DECLINE,
+   "Decline Incoming PyroWave Stream"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PYROWAVE_STOP,
+   "Stop PyroWave Streaming"
+   )
+MSG_HASH(
+   MSG_PYROWAVE_INCOMING,
+   "Incoming PyroWave stream request. Open Settings > Recording to accept or decline."
+   )
+
+MSG_HASH(
+   MSG_PYROWAVE_SHADERS_MISSING,
+   "PyroWave shaders are missing. Set the PyroWave Shader Directory in Settings > Recording."
    )

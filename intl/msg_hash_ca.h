@@ -261,7 +261,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    char s_e011fe61[48];
 #endif
-   char s_4e447c6c[43];
    char s_d9a51d02[22];
    char s_12e77e8f[9];
    char s_98760b94[40];
@@ -357,7 +356,9 @@ static const struct
    char s_314539a4[25];
    char s_8fc168f0[13];
    char s_213c44cf[20];
+   char s_4f4b0d00[11];
    char s_502f623c[8];
+   char s_223dfc81[8];
    char s_b6cd2ff0[51];
    char s_40e7aacd[6];
    char s_fe2b08f2[20];
@@ -1305,9 +1306,7 @@ static const struct
    char s_dcbf8b04[30];
    char s_dcbffdfe[29];
    char s_7816d5d5[37];
-   char s_2b1f17e8[30];
    char s_36c3acc7[18];
-   char s_b4c3612a[33];
    char s_f638f238[16];
    char s_f3358a59[29];
    char s_f8098721[62];
@@ -2282,6 +2281,7 @@ static const struct
    char s_61b5b9d0[20];
    char s_313e6a7a[28];
    char s_579c3ea7[25];
+   char s_e29ee11f[11];
    char s_ccf131c5[28];
    char s_e5124bba[8];
    char s_875bc33e[11];
@@ -3397,9 +3397,7 @@ static const struct
    char s_c5a76d72[61];
    char s_c5a7e06c[60];
    char s_37d36d03[68];
-   char s_eadbaf16[61];
    char s_54eaf5f5[29];
-   char s_7de5d198[64];
    char s_3b573ee6[26];
    char s_dc1d6cc7[55];
    char s_28543dcf[70];
@@ -5236,7 +5234,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    "Recarrega sempre el nucli en executar contingut",
 #endif
-   "Soluci\303\263 per les desconnexions d\342\200\231Android",
    "Icona de l'Aplicaci\303\263",
    "Recursos",
    "Obre el panell de configuraci\303\263 de ASIO",
@@ -5332,6 +5329,8 @@ static const struct
    "Identificador del paquet",
    "Mem\303\262ria cau",
    "Permetre la c\303\240mera",
+   "Dispositiu",
+   "C\303\240mera",
    "C\303\240mera",
    "No es pot activar els assoliments amb aquest nucli",
    "Trucs",
@@ -6284,9 +6283,7 @@ static const struct
    "Mostra \342\200\234Carrega el nucli\342\200\235",
    "Mostra \342\200\234Carrega el disc\342\200\235",
    "Mostra \342\200\234Actualitzador en l\303\255nia\342\200\235",
-   "Mostra \302\253Surt del RetroArch\302\273",
    "Mostrar Reiniciar",
-   "Mostra \302\253Reinicia el RetroArch\302\273",
    "Mostra 'Apagar'",
    "Mostra subetiquetes al men\303\272",
    "Mostra les etiquetes del men\303\272 nom\303\251s per la selecci\303\263 actual",
@@ -7273,6 +7270,7 @@ static const struct
    "MM-DD-AAAA HH:MM:SS",
    "MM-DD-AAAA HH:MM:SS (AM/PM)",
    "MM-DD-AAAA HH:MM (AM/PM)",
+   "Autom\303\240tic",
    "Estil de la data i l\342\200\231hora",
    "AAAA-MM",
    "AAAA-MM-DD",
@@ -8892,9 +8890,7 @@ static const struct
    "l.",
    "Mostra l\342\200\231opci\303\263 \342\200\234Actualitzador en l\303\255nia\342\200\235 al men"
    "\303\272 principal.",
-   "Mostra l\342\200\231opci\303\263 \302\253Surt del RetroArch\302\273 al men\303\272 principal.",
    "Mostra l'opci\303\263 'Reiniciar'.",
-   "Mostra l\342\200\231opci\303\263 \302\253Reinicia el RetroArch\302\273 al men\303\272 principal.",
    "Mostra l'opci\303\263 'Apagar'.",
    "Mostra informaci\303\263 addicional pels elements del men\303\272.",
    "Mostra nom\303\251s les etiquetes per les entrades del men\303\272 seleccionades.",
@@ -10874,7 +10870,7 @@ static const struct
  * compiler that pads this struct fails here instead of
  * misindexing at runtime. */
 typedef char msg_hash_ca_blob_check[
-      (sizeof(msg_hash_ca_blob) == (242855u
+      (sizeof(msg_hash_ca_blob) == (242654u
 #ifdef ANDROID
        + 281u
 #endif
@@ -11679,7 +11675,6 @@ static const msg_hash_id_t msg_hash_ca_ids[] =
 #ifndef HAVE_DYNAMIC
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ALWAYS_RELOAD_CORE_ON_RUN_CONTENT,
 #endif
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ANDROID_INPUT_DISCONNECT_WORKAROUND,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_APPICON_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ASSETS_DIRECTORY,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_AUDIO_ASIO_CONTROL_PANEL,
@@ -11775,7 +11770,9 @@ static const msg_hash_id_t msg_hash_ca_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_BUNDLE_IDENTIFIER,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CACHE_DIRECTORY,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_ALLOW,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DEVICE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DRIVER,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CANNOT_ACTIVATE_ACHIEVEMENTS_WITH_THIS_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT_ADDRESS,
@@ -12723,9 +12720,7 @@ static const msg_hash_id_t msg_hash_ca_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SUBLABELS_CURRENT_SELECTION_ONLY,
@@ -13699,6 +13694,7 @@ static const msg_hash_id_t msg_hash_ca_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MDYYYY_HMS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MDYYYY_HMS_AMPM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MDYYYY_HM_AMPM,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_AUTOMATIC,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_STYLE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YMD,
@@ -14806,9 +14802,7 @@ static const msg_hash_id_t msg_hash_ca_ids[] =
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SUBLABELS_CURRENT_SELECTION_ONLY,

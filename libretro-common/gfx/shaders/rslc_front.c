@@ -155,19 +155,39 @@ static unsigned rslc_lex_punct(const char *s, size_t avail, uint8_t *kind)
    return 0;
 }
 
+/* What a byte is to the lexer, one load to tell: */
+#define RSLC_CH_IDENT_START 1u /* a letter or '_' */
+#define RSLC_CH_DIGIT       2u
+#define RSLC_CH_SPACE       4u /* ' ' '\t' '\r' '\f' '\v' */
+#define RSLC_CH_LINE_STOP   8u /* what changes how a line reads: '\n' '/' '\\' '"' */
+#define RSLC_CH_SKIP       16u /* where rslc_lex_skip has something to do: whitespace, '/' '\\' */
+static const uint8_t rslc_ch_class[256] =
+{
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 8, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+   20, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0,
+   0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 24, 0, 0, 1,
+   0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+
+#define RSLC_CH(ch) rslc_ch_class[(uint8_t)(ch)]
+
 static int rslc_is_ident_start(char ch)
 {
-   return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_';
+   return RSLC_CH(ch) & RSLC_CH_IDENT_START;
 }
 
 static int rslc_is_digit(char ch)
 {
-   return ch >= '0' && ch <= '9';
+   return RSLC_CH(ch) & RSLC_CH_DIGIT;
 }
 
 static int rslc_is_ident(char ch)
 {
-   return rslc_is_ident_start(ch) || rslc_is_digit(ch);
+   return RSLC_CH(ch) & (RSLC_CH_IDENT_START | RSLC_CH_DIGIT);
 }
 
 /* Byte at pos + off, or 0 past the end. */
@@ -193,7 +213,7 @@ static void rslc_lex_skip(struct rslc_lex *l, bool *space)
       if (s >= end)
          break;
       ch = *s;
-      if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\f' || ch == '\v')
+      if (RSLC_CH(ch) & RSLC_CH_SPACE)
       {
          s++;
          *space = true;
@@ -282,7 +302,12 @@ static bool rslc_lex_next(struct rslc_lex *l, struct rslc_tok *t)
    char   ch;
    size_t start;
 
-   rslc_lex_skip(l, &space);
+   /* Most tokens follow nothing to skip: the call only when the next
+    * byte could start whitespace, a comment or a splice */
+   if (l->pos < l->len && !(RSLC_CH(l->src[l->pos]) & RSLC_CH_SKIP))
+      space = false;
+   else
+      rslc_lex_skip(l, &space);
    memset(t, 0, sizeof(*t));
    t->line  = l->line;
    t->file  = l->file;
@@ -627,6 +652,55 @@ static bool rslc_tok_is_eol(const struct rslc_tok *t)
 
 #define RSLC_TXT(pp, t) rslc_tok_text((pp)->c, (t))
 #define RSLC_SYM(pp, t) rslc_tok_sym((pp)->c, (t))
+
+/* An inactive branch's text, from the start of a line to the next line
+ * that begins with '#' (or the end): what lexing it would have skipped,
+ * without making a token of it. Whitespace and comments are skipped by
+ * rslc_lex_skip, as for a token, so line counts, splices and comments
+ * come out as they would; a string is stepped over whole, as the lexer
+ * takes it; anything else is one character at a time, with nothing
+ * hashed or interned. Stops with the lexer where it would have read the
+ * '#' (or EOF): at the start of its line, the BOL flag as it was. */
+static void rslc_pp_skip_inactive(struct rslc_lex *l)
+{
+   for (;;)
+   {
+      bool space;
+      char ch;
+      rslc_lex_skip(l, &space);
+      if (l->pos >= l->len)
+         return;
+      ch = l->src[l->pos];
+      if (ch == '\n')
+      {
+         l->pos++;
+         l->line++;
+         l->bol = true;
+         continue;
+      }
+      if (ch == '#' && l->bol)
+         return;
+      l->bol = false;
+      if (ch == '"')
+      {
+         l->pos++;
+         while (l->pos < l->len && l->src[l->pos] != '"' && l->src[l->pos] != '\n')
+            l->pos++;
+         if (l->pos < l->len && l->src[l->pos] == '"')
+            l->pos++;
+         continue;
+      }
+      /* The rest of the line up to what can change how it reads (a
+       * newline, a comment, a splice, a string): with the line under
+       * way, nothing else in it matters */
+      for (l->pos++; l->pos < l->len; l->pos++)
+      {
+         ch = l->src[l->pos];
+         if (RSLC_CH(ch) & RSLC_CH_LINE_STOP)
+            break;
+      }
+   }
+}
 
 /* Skips the rest of the current line in the raw stream. */
 static bool rslc_pp_skip_line(struct rslc_pp *pp)
@@ -1662,6 +1736,12 @@ bool rslc_pp_run(struct rslc_ctx *c, const char *src, size_t len)
    {
       bool expanded;
       rslc_pp_settle(pp);
+      /* An inactive branch read straight from the source is skipped to
+       * its next directive without being lexed: a stage that includes a
+       * long library and switches most of it off (an emulator's
+       * decompiled programs) spent most of its compile there */
+      if (!rslc_pp_active(pp) && pp->nsrc == 0 && !pp->has_peek && pp->lex.bol)
+         rslc_pp_skip_inactive(&pp->lex);
       if (!rslc_pp_raw(pp, &t))
          return false;
       if (t.kind == RSLC_TK_EOF)

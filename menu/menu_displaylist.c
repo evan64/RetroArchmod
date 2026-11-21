@@ -95,6 +95,10 @@
 #include "../audio/audio_driver.h"
 #include "../midi_driver.h"
 #include "../record/record_driver.h"
+#ifdef HAVE_PYROWAVE
+#include "../record/record_pyrowave_lan.h"
+#include "../record/record_pyrowave_receiver.h"
+#endif
 #include "../msg_hash_lbl_str.h"
 #ifdef __MACH__
 #include <TargetConditionals.h>
@@ -579,6 +583,17 @@ static bool filebrowser_parent_is_hidden_root(const char *dir)
    return slash - 1 == dir;
 }
 
+#ifdef HAVE_VULKAN_CUSTOM_DRIVER
+static void filebrowser_prepend_vulkan_driver_system(file_list_t *list)
+{
+   menu_entries_prepend(list,
+         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_VIDEO_VULKAN_DRIVER_PATH_USE_SYSTEM),
+         "",
+         MSG_UNKNOWN,
+         FILE_TYPE_VULKAN_DRIVER_SYSTEM, 0, 0);
+}
+#endif
+
 static int filebrowser_parse(
       file_list_t *info_list,
       const char *path,
@@ -977,6 +992,10 @@ end:
             path,
             MENU_ENUM_LABEL_PARENT_DIRECTORY,
             FILE_TYPE_PARENT_DIRECTORY, 0, 0);
+#ifdef HAVE_VULKAN_CUSTOM_DRIVER
+   if (type == DISPLAYLIST_VULKAN_DRIVERS)
+      filebrowser_prepend_vulkan_driver_system(info_list);
+#endif
    return count;
 }
 
@@ -1541,6 +1560,23 @@ end:
                count++;
             }
          }
+
+#if defined(HAVE_CORE_SIGNATURES) && defined(HAVE_CORE_LOAD_CHECK)
+         /* Core trust: its state is kept in entry_idx, so drawing
+          * the row never touches the disk */
+         if (     core_trust_runtime_checks_on()
+               && menu_entries_append(list,
+                     core_path,
+                     core_path,
+                     MENU_ENUM_LABEL_CORE_TRUST,
+                     MENU_SETTING_ACTION_CORE_TRUST, 0,
+                     (size_t)core_trust_runtime_state(core_path), NULL))
+         {
+            file_list_set_alt_at_offset(
+                  list, count, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_CORE_TRUST));
+            count++;
+         }
+#endif
 
          /* Backup core */
          if (menu_entries_append(list,
@@ -5157,6 +5193,11 @@ static int menu_displaylist_parse_load_content_settings(
       }
 #endif
 
+#ifdef HAVE_PYROWAVE
+      if (menu_entries_append(list, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_PYROWAVE_DEVICES),
+               MENU_ENUM_LABEL_PYROWAVE_DEVICES_STR, MENU_ENUM_LABEL_PYROWAVE_DEVICES,
+               MENU_SETTING_ACTION, 0, 0, NULL)) count++;
+#endif
       if (string_is_not_equal(settings->arrays.record_driver, "null"))
       {
          recording_state_t *recording_st = recording_state_get_ptr();
@@ -12452,6 +12493,42 @@ unsigned menu_displaylist_build_list(
                         false) == 0)
                   count++;
             }
+#ifdef HAVE_PYROWAVE
+            {
+               static const menu_displaylist_build_info_t lan_settings[] = {
+                  {MENU_ENUM_LABEL_PYROWAVE_DISCOVERY_ENABLE, PARSE_ONLY_BOOL},
+                  {MENU_ENUM_LABEL_PYROWAVE_FULL_OUTPUT, PARSE_ONLY_BOOL},
+                  {MENU_ENUM_LABEL_PYROWAVE_DEVICE_NAME, PARSE_ONLY_STRING},
+                  {MENU_ENUM_LABEL_PYROWAVE_SHADER_DIRECTORY, PARSE_ONLY_DIR}
+               };
+               size_t peer_index;
+               for (peer_index = 0; peer_index < ARRAY_SIZE(lan_settings); peer_index++)
+                  if (MENU_DISPLAYLIST_PARSE_SETTINGS_ENUM(list, lan_settings[peer_index].enum_idx,
+                           lan_settings[peer_index].parse_type, false) == 0) count++;
+               if (record_pyrowave_receiver_incoming())
+               {
+                  if (menu_entries_append(list, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_PYROWAVE_ACCEPT),
+                           MENU_ENUM_LABEL_PYROWAVE_ACCEPT_STR, MENU_ENUM_LABEL_PYROWAVE_ACCEPT,
+                           MENU_SETTING_ACTION, 0, 0, NULL)) count++;
+                  if (menu_entries_append(list, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_PYROWAVE_DECLINE),
+                           MENU_ENUM_LABEL_PYROWAVE_DECLINE_STR, MENU_ENUM_LABEL_PYROWAVE_DECLINE,
+                           MENU_SETTING_ACTION, 0, 0, NULL)) count++;
+               }
+               if (record_pyrowave_receiver_active() || record_pyrowave_lan_sending())
+                  if (menu_entries_append(list, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_PYROWAVE_STOP),
+                           MENU_ENUM_LABEL_PYROWAVE_STOP_STR, MENU_ENUM_LABEL_PYROWAVE_STOP,
+                           MENU_SETTING_ACTION, 0, 0, NULL)) count++;
+               for (peer_index = 0; peer_index < record_pyrowave_lan_count(); peer_index++)
+               {
+                  const record_pyrowave_lan_peer_t *peer = record_pyrowave_lan_peer(peer_index);
+                  char text[160];
+                  if (!peer) continue;
+                  snprintf(text, sizeof(text), "%s %s", msg_hash_to_str(MENU_ENUM_LABEL_VALUE_PYROWAVE_SEND), peer->name);
+                  if (menu_entries_append(list, text, peer->key, MENU_ENUM_LABEL_PYROWAVE_SEND,
+                           MENU_SETTING_ACTION, 0, 0, NULL)) count++;
+               }
+            }
+#endif
          }
          break;
       case DISPLAYLIST_ACCOUNTS_YOUTUBE_LIST:
@@ -12747,6 +12824,24 @@ unsigned menu_displaylist_build_list(
          break;
       case DISPLAYLIST_OPTIONS_DISK:
          count = menu_displaylist_parse_disk_options(list);
+         break;
+      case DISPLAYLIST_CAMERA_SETTINGS_LIST:
+         {
+            static const menu_displaylist_build_info_t build_list[] = {
+               {MENU_ENUM_LABEL_CAMERA_DRIVER,  PARSE_ONLY_STRING_OPTIONS},
+               {MENU_ENUM_LABEL_CAMERA_DEVICE,  PARSE_ONLY_STRING},
+               {MENU_ENUM_LABEL_CAMERA_ALLOW,   PARSE_ONLY_BOOL},
+               {MENU_ENUM_LABEL_CAMERA_PREVIEW, PARSE_ACTION},
+            };
+
+            for (i = 0; i < ARRAY_SIZE(build_list); i++)
+            {
+               if (MENU_DISPLAYLIST_PARSE_SETTINGS_ENUM(list,
+                        build_list[i].enum_idx,  build_list[i].parse_type,
+                        false) == 0)
+                  count++;
+            }
+         }
          break;
       case DISPLAYLIST_MIDI_SETTINGS_LIST:
          {
@@ -13664,8 +13759,6 @@ unsigned menu_displaylist_build_list(
                {MENU_ENUM_LABEL_MENU_SHOW_REBOOT,                                      PARSE_ONLY_BOOL, true  },
                {MENU_ENUM_LABEL_MENU_SHOW_SHUTDOWN,                                    PARSE_ONLY_BOOL, true  },
                {MENU_ENUM_LABEL_TIMEDATE_ENABLE,                                       PARSE_ONLY_BOOL, true  },
-               {MENU_ENUM_LABEL_TIMEDATE_STYLE,                                        PARSE_ONLY_UINT, true  },
-               {MENU_ENUM_LABEL_TIMEDATE_DATE_SEPARATOR,                               PARSE_ONLY_UINT, true  },
                {MENU_ENUM_LABEL_BATTERY_LEVEL_ENABLE,                                  PARSE_ONLY_BOOL, true  },
                {MENU_ENUM_LABEL_CORE_ENABLE,                                           PARSE_ONLY_BOOL, true  },
                {MENU_ENUM_LABEL_MENU_SHOW_SUBLABELS,                                   PARSE_ONLY_BOOL, true  },
@@ -14589,6 +14682,7 @@ unsigned menu_displaylist_build_list(
                {MENU_ENUM_LABEL_CORE_SETTINGS,               PARSE_ACTION, true},
                {MENU_ENUM_LABEL_SAVING_SETTINGS,             PARSE_ACTION, true},
                {MENU_ENUM_LABEL_RECORDING_SETTINGS,          PARSE_ACTION, true},
+               {MENU_ENUM_LABEL_CAMERA_SETTINGS,             PARSE_ACTION, true},
                {MENU_ENUM_LABEL_CONFIGURATION_SETTINGS,      PARSE_ACTION, true},
                {MENU_ENUM_LABEL_ACCESSIBILITY_SETTINGS,      PARSE_ACTION, true},
                {MENU_ENUM_LABEL_POWER_MANAGEMENT_SETTINGS,   PARSE_ACTION, true},
@@ -15291,6 +15385,10 @@ unsigned menu_displaylist_build_list(
                {MENU_ENUM_LABEL_MENU_SCALE_FACTOR,                            PARSE_ONLY_FLOAT,  true},
                {MENU_ENUM_LABEL_OZONE_PADDING_FACTOR,                         PARSE_ONLY_FLOAT,  true},
                {MENU_ENUM_LABEL_MENU_FRAMEBUFFER_OPACITY,                     PARSE_ONLY_FLOAT,  true},
+               {MENU_ENUM_LABEL_TIMEDATE_MODE,                                PARSE_ONLY_UINT,   true},
+               {MENU_ENUM_LABEL_TIMEDATE_12HOUR,                              PARSE_ONLY_BOOL,   false},
+               {MENU_ENUM_LABEL_TIMEDATE_STYLE,                               PARSE_ONLY_UINT,   false},
+               {MENU_ENUM_LABEL_TIMEDATE_DATE_SEPARATOR,                      PARSE_ONLY_UINT,   true},
                {MENU_ENUM_LABEL_MENU_HDR_BRIGHTNESS_NITS,                     PARSE_ONLY_FLOAT,  false},
                {MENU_ENUM_LABEL_XMB_RIBBON_ENABLE,                            PARSE_ONLY_UINT,   true},
                {MENU_ENUM_LABEL_XMB_THEME,                                    PARSE_ONLY_UINT,   true},
@@ -15301,12 +15399,13 @@ unsigned menu_displaylist_build_list(
                {MENU_ENUM_LABEL_RGUI_MENU_COLOR_THEME,                        PARSE_ONLY_UINT,   true},
                {MENU_ENUM_LABEL_RGUI_MENU_THEME_PRESET,                       PARSE_ONLY_PATH,   false},
                {MENU_ENUM_LABEL_MENU_PIX16_WIDESCREEN,                        PARSE_ONLY_BOOL,   true},
-               {MENU_ENUM_LABEL_MENU_PIX16_CLASSIC_THEME,                     PARSE_ONLY_BOOL,   true},
                {MENU_ENUM_LABEL_MENU_PIX16_BOOT_SCREEN,                       PARSE_ONLY_BOOL,   true},
                {MENU_ENUM_LABEL_MENU_PIX16_START_SCREEN,                      PARSE_ONLY_BOOL,   true},
                {MENU_ENUM_LABEL_MENU_PIX16_BUTTON_STYLE,                      PARSE_ONLY_UINT,   true},
                {MENU_ENUM_LABEL_MENU_PIX16_TRANSITION,                        PARSE_ONLY_UINT,   true},
+               {MENU_ENUM_LABEL_MENU_PIX16_BACKGROUND,                        PARSE_ONLY_UINT,   true},
                {MENU_ENUM_LABEL_MENU_PIX16_PALETTE,                           PARSE_ONLY_UINT,   true},
+               {MENU_ENUM_LABEL_MENU_PIX16_REDUCED_MOTION,                    PARSE_ONLY_BOOL,   true},
                {MENU_ENUM_LABEL_MENU_USE_PREFERRED_SYSTEM_COLOR_THEME,        PARSE_ONLY_BOOL,   true},
                {MENU_ENUM_LABEL_MENU_WALLPAPER,                               PARSE_ONLY_PATH ,  true},
                {MENU_ENUM_LABEL_DYNAMIC_WALLPAPER,                            PARSE_ONLY_BOOL ,  true},
@@ -15446,6 +15545,14 @@ unsigned menu_displaylist_build_list(
                      break;
                   case MENU_ENUM_LABEL_MENU_HDR_BRIGHTNESS_NITS:
                      build_list[i].checked = (settings->uints.video_hdr_mode > 0);
+                     break;
+                  case MENU_ENUM_LABEL_TIMEDATE_12HOUR:
+                     build_list[i].checked = settings->uints.menu_timedate_mode
+                                          != MENU_TIMEDATE_MODE_MANUAL;
+                     break;
+                  case MENU_ENUM_LABEL_TIMEDATE_STYLE:
+                     build_list[i].checked = settings->uints.menu_timedate_mode
+                                          == MENU_TIMEDATE_MODE_MANUAL;
                      break;
                   default:
                      break;
@@ -18136,6 +18243,7 @@ static bool menu_displaylist_ctl_internal(
          case DISPLAYLIST_LAKKA_SWITCH_OPTIONS_LIST:
 #endif
          case DISPLAYLIST_MIDI_SETTINGS_LIST:
+         case DISPLAYLIST_CAMERA_SETTINGS_LIST:
          case DISPLAYLIST_CRT_SWITCHRES_SETTINGS_LIST:
          case DISPLAYLIST_VIDEO_FULLSCREEN_MODE_SETTINGS_LIST:
          case DISPLAYLIST_VIDEO_WINDOWED_MODE_SETTINGS_LIST:
@@ -18845,6 +18953,12 @@ static bool menu_displaylist_ctl_internal(
                            PARSE_ACTION, false) == 0)
                      count++;
 
+#ifdef HAVE_PYROWAVE
+               if (menu_entries_append(info->list, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_PYROWAVE_DEVICES),
+                        MENU_ENUM_LABEL_PYROWAVE_DEVICES_STR, MENU_ENUM_LABEL_PYROWAVE_DEVICES,
+                        MENU_SETTING_ACTION, 0, 0, NULL)) count++;
+#endif
+
 #ifdef HAVE_CONFIGFILE
                if (      settings->bools.menu_show_configurations
                      && !settings->bools.kiosk_mode_enable)
@@ -18864,7 +18978,7 @@ static bool menu_displaylist_ctl_internal(
                      count++;
 #endif
 
-#if defined(HAVE_LIBNX)
+#if defined(HAVE_LIBNX) && !defined(__SWITCH2__)
                if (MENU_DISPLAYLIST_PARSE_SETTINGS_ENUM(
                      info->list,
                      MENU_ENUM_LABEL_SWITCH_CPU_PROFILE,
@@ -18872,11 +18986,13 @@ static bool menu_displaylist_ctl_internal(
                   count++;
 #endif
 
+#ifndef __SWITCH2__
                if (MENU_DISPLAYLIST_PARSE_SETTINGS_ENUM(
                      info->list,
                      MENU_ENUM_LABEL_SWITCH_GPU_PROFILE,
                      PARSE_ACTION, false) == 0)
                   count++;
+#endif
 
 #if !TARGET_OS_IPHONE
                if (settings->bools.menu_show_restart_retroarch)
@@ -19297,7 +19413,11 @@ static bool menu_displaylist_ctl_internal(
                   break;
                case DISPLAYLIST_VULKAN_DRIVERS:
                   info->type_default = FILE_TYPE_VULKAN_DRIVER;
+#ifdef ANDROID
                   info->exts         = strldup("zip", sizeof("zip"));
+#else
+                  info->exts         = strldup("json", sizeof("json"));
+#endif
                   break;
                case DISPLAYLIST_STREAM_CONFIG_FILES:
                   info->type_default = FILE_TYPE_STREAM_CONFIG;
@@ -20272,6 +20392,10 @@ static bool menu_displaylist_ctl_internal(
                            FILE_TYPE_DIRECTORY, 0, 0, NULL))
                      count++;
             }
+#endif
+#ifdef HAVE_VULKAN_CUSTOM_DRIVER
+            if (type == DISPLAYLIST_VULKAN_DRIVERS)
+               filebrowser_prepend_vulkan_driver_system(info->list);
 #endif
          }
          else

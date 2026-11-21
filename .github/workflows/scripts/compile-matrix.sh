@@ -771,6 +771,13 @@ check "features_cpu: ps3"        "$HOSTOFF -Itools/platform_stubs/ps3 -D__PS3__ 
 check "features_cpu: psl1ght"    "$HOSTOFF -Itools/platform_stubs/psl1ght -D__PS3__ -D__PSL1GHT__ -DRARCH_CONSOLE" $FCPU_TU
 check "features_cpu: emscripten" "$HOSTOFF -Itools/platform_stubs/emscripten -D__EMSCRIPTEN__ -DEMSCRIPTEN" $FCPU_TU
 
+# The Allegrex (VFPU) branches of the sample converters, which only the
+# PSP toolchain compiles. The host cannot assemble the VFPU, but the C
+# around it - alignment heads, loop selection - is checked here, with
+# the x86 SIMD paths that would otherwise take precedence shed.
+CONV_TUS="libretro-common/audio/conversion/float_to_s16.c libretro-common/audio/conversion/s16_to_float.c"
+check "conversion: allegrex" "$HOSTOFF -U__SSE__ -U__SSE2__ -U__AVX2__ -U__AVX512F__ -DPSP -D_MIPS_ARCH_ALLEGREX -DDEBUG -std=c89 -pedantic -Wno-long-long -Werror" $CONV_TUS
+
 # Shared menu and video code under the console platform macros. These
 # files are compiled by every desktop job, but the blocks inside them
 # that a console selects are not, and a change to a struct those blocks
@@ -953,6 +960,46 @@ for mk in Makefile.*.salamander Makefile.wiiu; do
       echo "ok    salamander link: $mk object set"
    fi
    rm -f /tmp/salamander_link_check
+done
+
+# The calendar reads in rtime.c and the snapshot behind them, down each
+# arm of rtime.c's ladder: POSIX with a looked-up clock_gettime on
+# Apple, the system property on Android, the plain time(NULL) arm every
+# other console takes, and Win32 desktop and WinRT through mingw-w64.
+# Orbis is FreeBSD to its compiler, so it is checked with that target.
+CALTU="libretro-common/time/rtime.c calendar_time.c"
+check "calendar: apple"   "$HOSTOFF -D__APPLE__ -D__MACH__ -Itools/platform_stubs/apple -Werror" $CALTU
+check "calendar: android" "$HOSTOFF -DANDROID -Itools/platform_stubs/android -Werror" $CALTU
+for plat in GEKKO _3DS __SWITCH__ VITA PSP DJGPP __EMSCRIPTEN__ __QNX__ _XBOX; do
+   check "calendar: $plat, C89" "$HOSTOFF -D$plat $C89" $CALTU
+done
+if command -v clang > /dev/null 2>&1 \
+      && clang --target=x86_64-scei-ps4 -x c -c -o /dev/null /dev/null \
+         > /dev/null 2>&1; then
+   CC_SAVED=$CC
+   CC="clang --target=x86_64-scei-ps4 -isystem tools/platform_stubs/sce -isystem /usr/include"
+   [ -d /usr/include/x86_64-linux-gnu ] \
+      && CC="$CC -isystem /usr/include/x86_64-linux-gnu"
+   check "calendar: orbis" "$HOSTOFF -DORBIS -Itools/platform_stubs/orbis -Werror" $CALTU
+   CC=$CC_SAVED
+else
+   echo "skip  calendar: orbis (no clang for x86_64-scei-ps4)"
+fi
+for mingw in x86_64-w64-mingw32-gcc i686-w64-mingw32-gcc; do
+   if ! command -v $mingw > /dev/null 2>&1; then
+      echo "skip  calendar: $mingw"
+      continue
+   fi
+   for winrt in "" "-D__WINRT__ -D_WIN32_WINNT=0x0A00"; do
+      if ! out=$($mingw -std=gnu99 -Wall -Werror $INC $winrt \
+            -fsyntax-only $CALTU 2>&1); then
+         echo "FAIL  calendar: $mingw $winrt"
+         show_out "$out"
+         fail=1
+      else
+         echo "ok    calendar: $mingw $winrt"
+      fi
+   done
 done
 
 # runloop.c under Android: runloop_idle_wait's looper branch, and every

@@ -178,7 +178,6 @@
 #define MUI_NAV_BAR_NUM_ACTION_TABS 2
 
 #define MUI_BATTERY_PERCENT_MAX_LENGTH 12
-#define MUI_TIMEDATE_MAX_LENGTH        255
 
 /* Maximum number of playlist tabs whose last-selected
  * entry index can be cached in mui->playlist_selection[].
@@ -546,8 +545,9 @@ typedef struct
 {
    int battery_percent_width;
    int timedate_width;
+   /* The clock text timedate_width was measured for; 0 for none */
+   unsigned timedate_gen;
    char battery_percent_str[MUI_BATTERY_PERCENT_MAX_LENGTH];
-   char timedate_str[MUI_TIMEDATE_MAX_LENGTH];
 } materialui_sys_bar_cache_t;
 
 /* This structure holds all runtime parameters
@@ -653,6 +653,7 @@ typedef struct materialui_handle
    struct
    {
       gfx_thumbnail_t savestate;   /* uintptr_t alignment */
+      gfx_thumbnail_t camera;      /* Settings > Camera > Preview */
    } thumbnails;
 
    size_t (*word_wrap)(
@@ -2862,7 +2863,8 @@ static void materialui_render_messagebox(
    int slice_y                = 0;
    int slice_w                = 0;
    int slice_h                = 0;
-   bool draw_selection = draw_caret && input_driver_keyboard_line_selected();
+   unsigned kb_state   = draw_caret ? input_driver_keyboard_line_state() : 0;
+   bool draw_selection = (kb_state & INPUT_KEYBOARD_LINE_SELECTED) != 0;
    unsigned selection_first_line = 1;
    float selection_color[16] = {
       0.20f, 0.40f, 0.80f, 0.35f,
@@ -3001,9 +3003,10 @@ static void materialui_render_messagebox(
 
       if (keep_wrap)
       {
-         /* The input dialog may hand back the kept text itself */
+         /* The input dialog may hand back the kept text itself, and
+          * the box measures what it is handed by its terminator */
          if (msg != mui->box_wrap.text)
-            memcpy(mui->box_wrap.text, msg, msg_len);
+            memcpy(mui->box_wrap.text, msg, msg_len + 1);
          mui->box_wrap.font            = mui->font_data.list.font;
          mui->box_wrap.font_generation = mui->font_data.list.metrics_generation;
          mui->box_wrap.columns         = columns;
@@ -3132,8 +3135,12 @@ static void materialui_render_messagebox(
          if (d > (size_t)lengths[l])
             d = (size_t)lengths[l];
          cursor_line = (unsigned)l;
-         cursor_x    = font_driver_get_message_width(
-               mui->font_data.list.font, lines[l], d, 1.0f);
+         /* Among Hebrew or Arabic, where the caret lands as drawn */
+         cursor_x    = (kb_state & INPUT_KEYBOARD_LINE_RTL)
+            ? font_driver_get_caret_x(mui->font_data.list.font, lines[l],
+                  (size_t)lengths[l], d, 1.0f)
+            : font_driver_get_message_width(
+                  mui->font_data.list.font, lines[l], d, 1.0f);
 
          draw_caret  = !draw_selection;
       }
@@ -7506,29 +7513,17 @@ MUI_NOINLINE static void materialui_render_header(
    /* > Draw clock (if required) */
    if (menu_timedate_enable)
    {
-      gfx_display_ctx_datetime_t datetime;
-      char timedate_str[MUI_TIMEDATE_MAX_LENGTH];
-      datetime.time_mode      = menu_timedate_style;
-      datetime.date_separator = menu_timedate_date_separator;
+      size_t timedate_len;
+      unsigned timedate_gen;
+      const char *timedate_str = menu_display_timedate(menu_timedate_style,
+            menu_timedate_date_separator, &timedate_len, &timedate_gen);
 
-      menu_display_timedate(&datetime, timedate_str, sizeof(timedate_str));
-
-      /* Need to determine pixel width of time string
-       * > This is somewhat expensive, so utilise a cache
-       *   and only update when the string actually changes */
-      if (!string_is_equal(timedate_str, mui->sys_bar_cache.timedate_str))
+      /* Measuring is expensive: only when the text changes */
+      if (timedate_gen != mui->sys_bar_cache.timedate_gen)
       {
-         /* Cache new string */
-         size_t _len = strlcpy(mui->sys_bar_cache.timedate_str, timedate_str,
-               MUI_TIMEDATE_MAX_LENGTH * sizeof(char));
-
-         /* Cache width */
-         mui->sys_bar_cache.timedate_width
-            = font_driver_get_message_width(
-               mui->font_data.hint.font,
-               mui->sys_bar_cache.timedate_str,
-               _len,
-               1.0f);
+         mui->sys_bar_cache.timedate_gen   = timedate_gen;
+         mui->sys_bar_cache.timedate_width = font_driver_get_message_width(
+               mui->font_data.hint.font, timedate_str, timedate_len, 1.0f);
       }
 
       /* Draw time string */
@@ -7541,7 +7536,7 @@ MUI_NOINLINE static void materialui_render_header(
             sys_bar_clock_width += mui->sys_bar_margin;
 
          gfx_display_draw_text(mui->font_data.hint.font,
-               mui->sys_bar_cache.timedate_str,
+               timedate_str,
                (int)video_width - (
                     (int)sys_bar_clock_width
                   + (int)sys_bar_battery_width
@@ -8452,7 +8447,7 @@ MUI_NOINLINE static void materialui_render_fullscreen_thumbnails(materialui_hand
                NULL);
 
          /* Thumbnail */
-         gfx_thumbnail_draw(
+         gfx_thumbnail_draw_shader(
                userdata,
                video_dims,
                primary_thumbnail,
@@ -8488,7 +8483,7 @@ MUI_NOINLINE static void materialui_render_fullscreen_thumbnails(materialui_hand
                NULL);
 
          /* Thumbnail */
-         gfx_thumbnail_draw(
+         gfx_thumbnail_draw_shader(
                userdata,
                video_dims,
                secondary_thumbnail,
@@ -8943,11 +8938,32 @@ static void materialui_frame(void *data, video_frame_info_t *video_info)
       unsigned preview_height = video_height / 4;
       unsigned right = video_width > VIDEO_SCALE_W(mui->nav_bar_layout_dims)
          ? video_width - VIDEO_SCALE_W(mui->nav_bar_layout_dims) : video_width;
-      gfx_thumbnail_draw(userdata, video_info->dims, &mui->browser_thumbnail,
+      gfx_thumbnail_draw_shader(userdata, video_info->dims, &mui->browser_thumbnail,
             (float)(right > preview_width ? right - preview_width : 0),
             (float)(video_height - preview_height) / 2.0f,
             VIDEO_SCALE_PACK(preview_width, preview_height), GFX_THUMBNAIL_ALIGN_CENTRE,
             1.0f, 1.0f, NULL);
+   }
+
+   /* The camera preview, at the foot of the entries clear of the
+    * navigation bar: the camera page is a few entries tall. */
+   if (menu_camera_preview_update(&mui->thumbnails.camera))
+   {
+      unsigned right  = video_width;
+      unsigned bottom = video_height;
+      unsigned w      = (video_height > video_width)
+         ? video_width * 3 / 4 : video_width * 2 / 5;
+      unsigned h      = w * 3 / 4;
+      unsigned margin = mui->margin;
+      if (mui->nav_bar.location == MUI_NAV_BAR_LOCATION_RIGHT)
+         right  -= MIN(right, mui->nav_bar.width);
+      else if (mui->nav_bar.location == MUI_NAV_BAR_LOCATION_BOTTOM)
+         bottom -= MIN(bottom, mui->nav_bar.width);
+      menu_camera_preview_draw(&mui->thumbnails.camera, userdata,
+            video_info->dims,
+            (float)((int)right - (int)w - (int)margin),
+            (float)((int)bottom - (int)h - (int)margin),
+            VIDEO_SCALE_PACK(w, h));
    }
 
    /* Draw title + system bar */
@@ -8970,7 +8986,8 @@ static void materialui_frame(void *data, video_frame_info_t *video_info)
    if (menu_input_dialog_get_display_kb())
    {
       size_t _len;
-      char msg[NAME_MAX_LENGTH];
+      /* As long as the text the box wraps and keeps */
+      char msg[MENU_LABEL_MAX_LENGTH];
       const char *text;
       const char *str                = menu_input_dialog_get_buffer();
       const char *label              = menu_st->input_dialog_kb_label;
@@ -9955,7 +9972,7 @@ static void materialui_layout(materialui_handle_t *mui,
     * size will change) */
    mui->sys_bar_cache.battery_percent_str[0] = '\0';
    mui->sys_bar_cache.battery_percent_width  = 0;
-   mui->sys_bar_cache.timedate_str[0]        = '\0';
+   mui->sys_bar_cache.timedate_gen           = 0;
    mui->sys_bar_cache.timedate_width         = 0;
 
    materialui_update_list_view(mui, menu_st, settings);
@@ -10220,6 +10237,7 @@ static void materialui_reset_thumbnails(materialui_handle_t *mui)
    }
 
    gfx_thumbnail_reset(&mui->thumbnails.savestate);
+   gfx_thumbnail_reset(&mui->thumbnails.camera);
 }
 
 static void materialui_context_destroy(void *data)
@@ -12470,6 +12488,7 @@ static void materialui_list_insert(void *userdata,
          case MENU_SETTING_ACTION_CORE_LOCK:
          case MENU_SETTING_ACTION_CORE_SET_STANDALONE_EXEMPT:
          case MENU_SETTING_ACTION_CORE_SIGNATURE_CHECK:
+         case MENU_SETTING_ACTION_CORE_TRUST:
          case MENU_CONTENTLESS_CORES_TAB:
             node->icon_texture_index = MUI_TEXTURE_CORES;
             node->icon_type          = MUI_ICON_TYPE_INTERNAL;
@@ -12492,6 +12511,7 @@ static void materialui_list_insert(void *userdata,
             node->icon_type          = MUI_ICON_TYPE_INTERNAL;
             break;
          case FILE_TYPE_USE_DIRECTORY:
+         case FILE_TYPE_VULKAN_DRIVER_SYSTEM:
             node->icon_texture_index = MUI_TEXTURE_CHECKMARK;
             node->icon_type          = MUI_ICON_TYPE_INTERNAL;
             break;
@@ -13095,6 +13115,7 @@ static void materialui_list_insert(void *userdata,
                   || string_is_equal(label, MENU_ENUM_LABEL_DIRECTORY_SETTINGS_STR)
                   || string_is_equal(label, MENU_ENUM_LABEL_PRIVACY_SETTINGS_STR)
                   || string_is_equal(label, MENU_ENUM_LABEL_MIDI_SETTINGS_STR)
+                  || string_is_equal(label, MENU_ENUM_LABEL_CAMERA_SETTINGS_STR)
                   || string_is_equal(label, MENU_ENUM_LABEL_MENU_VIEWS_SETTINGS_STR)
                   || string_is_equal(label, MENU_ENUM_LABEL_QUICK_MENU_VIEWS_SETTINGS_STR)
                   || string_is_equal(label, MENU_ENUM_LABEL_SETTINGS_VIEWS_SETTINGS_STR)

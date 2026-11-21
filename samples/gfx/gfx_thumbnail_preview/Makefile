@@ -330,7 +330,7 @@ $(AUDIO_FEED_TARGET): $(AUDIO_FEED_SOURCES)
 	      -I$(REPO_ROOT) -I$(REPO_ROOT)/deps $(FEED_IO_FLAGS) $(LDFLAGS) $(FEED_IO_LIBS)
 
 $(AUDIO_FEED_THREADED_TARGET): $(AUDIO_FEED_SOURCES) $(THREADED_EXTRA)
-	$(CC) -o $@ $^ $(DECODE_CFLAGS_COMMON) -DHAVE_RWEBM -DHAVE_ROPUS -DHAVE_RVORBIS -DHAVE_RFLAC -DHAVE_THREADS \
+	$(CC) -o $@ $(filter %.c,$^) $(DECODE_CFLAGS_COMMON) -DHAVE_RWEBM -DHAVE_ROPUS -DHAVE_RVORBIS -DHAVE_RFLAC -DHAVE_THREADS \
 	      -I$(REPO_ROOT) -I$(REPO_ROOT)/deps $(FEED_IO_FLAGS) $(LDFLAGS) $(FEED_IO_LIBS) -lpthread
 
 # The banded colour conversion against the single-threaded one, frame
@@ -481,6 +481,7 @@ endif
 # a different SANITIZER=, and a clean that took the fixtures with it
 # left the following run globbing nothing.  Use distclean to drop them.
 clean:
+	rm -f preview_m4a_load.h preview_audio_feed_test_ac3 preview_audio_feed_test_ac3.exe
 	rm -f preview_audio_feed_test_flac preview_audio_feed_test_flac.exe
 	rm -f preview_audio_tracks_test preview_audio_tracks_test.exe
 	rm -f $(AUDIO_TIMELINE_TARGET) $(AUDIO_TIMELINE_TARGET).exe
@@ -532,9 +533,22 @@ FLAC_FEED_SOURCES := $(filter-out $(LIBRETRO_COMM_DIR)/formats/aac/raac.c \
    $(LIBRETRO_COMM_DIR)/formats/opus/ropus.c \
    $(LIBRETRO_COMM_DIR)/formats/vorbis/rvorbis.c,$(AUDIO_FEED_SOURCES))
 preview_audio_feed_test_flac: $(FLAC_FEED_SOURCES)
-	$(CC) -o $@ $^ $(DECODE_CFLAGS_COMMON) -UHAVE_RAAC -DHAVE_RWEBM -DHAVE_RFLAC \
+	$(CC) -o $@ $(filter %.c,$^) $(DECODE_CFLAGS_COMMON) -UHAVE_RAAC -DHAVE_RWEBM -DHAVE_RFLAC \
 	      -I$(REPO_ROOT) -I$(REPO_ROOT)/deps $(LDFLAGS)
 audio-flac-only-check: preview_audio_feed_test_flac
 	./preview_audio_feed_test_flac --selected-track webm $(LIBRETRO_COMM_DIR)/samples/formats/audio_transfer_tracks/fixtures/flac.bin
 check: audio-flac-only-check
 .PHONY: audio-flac-only-check
+
+AC3_FEED_SOURCES := $(AUDIO_FEED_SOURCES) $(LIBRETRO_COMM_DIR)/formats/ac3/rac3_frame.c $(LIBRETRO_COMM_DIR)/formats/ac3/rac3_decode.c
+preview_audio_feed_test_ac3: $(AC3_FEED_SOURCES)
+	$(CC) -o $@ $(AC3_FEED_SOURCES) $(DECODE_CFLAGS_COMMON) -DHAVE_RAC3 -DHAVE_RWEBM -DHAVE_ROPUS -DHAVE_RVORBIS -DHAVE_RFLAC -I$(REPO_ROOT) -I$(REPO_ROOT)/deps $(FEED_IO_FLAGS) $(LDFLAGS) $(FEED_IO_LIBS)
+audio-ac3-check: preview_audio_feed_test_ac3
+	$(MAKE) -C $(LIBRETRO_COMM_DIR)/samples/formats/audio_transfer_ac3 mp4_test
+	python3 $(LIBRETRO_COMM_DIR)/samples/formats/audio_transfer_ac3/mp4_test.py --test $(LIBRETRO_COMM_DIR)/samples/formats/audio_transfer_ac3/mp4_test --preview-test ./preview_audio_feed_test_ac3
+check: audio-ac3-check
+.PHONY: audio-ac3-check
+
+preview_m4a_load.h: $(REPO_ROOT)/audio/audio_driver.c extract_m4a_load.py
+	python3 extract_m4a_load.py
+$(AUDIO_FEED_TARGET) $(AUDIO_FEED_THREADED_TARGET) preview_audio_feed_test_flac preview_audio_feed_test_ac3: preview_m4a_load.h

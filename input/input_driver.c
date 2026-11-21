@@ -3926,6 +3926,17 @@ static int16_t input_port_stick_axis(input_driver_state_t *input_st,
    return input_st->stick_cache[port][slot][ident];
 }
 
+/* Whether len bytes at s hold a Hebrew or Arabic lead byte */
+static bool input_keyboard_text_rtl(const char *s, size_t len)
+{
+   const unsigned char *p   = (const unsigned char*)s;
+   const unsigned char *end = p + len;
+   for (; p < end; p++)
+      if (*p - 0xD6u < 6)
+         return true;
+   return false;
+}
+
 void input_keyboard_line_append(struct input_keyboard_line *kb_line,
       const char *word, size_t len)
 {
@@ -3966,7 +3977,10 @@ void input_keyboard_line_append(struct input_keyboard_line *kb_line,
       kb_line->ptr        = 0;
       kb_line->size       = 0;
       kb_line->select_all = false;
+      kb_line->rtl        = false;
    }
+   if (!kb_line->rtl)
+      kb_line->rtl        = input_keyboard_text_rtl(word, len);
 
    /* Shift existing content after insertion point to make room */
    memmove(
@@ -3992,6 +4006,7 @@ void input_keyboard_line_clear(input_driver_state_t *input_st)
    input_st->keyboard_line.capacity     = 0;
    input_st->keyboard_line.select_all   = false;
    input_st->keyboard_line.fixed        = false;
+   input_st->keyboard_line.rtl          = false;
 }
 
 /* A line of text has been opened, or closed. This is the one place the
@@ -4024,6 +4039,7 @@ void input_keyboard_line_free(input_driver_state_t *input_st)
    kb_line->enabled            = false;
    kb_line->select_all         = false;
    kb_line->fixed              = false;
+   kb_line->rtl                = false;
    input_st->osk_textbox_focus = false;
    input_text_entry_changed(false);
 }
@@ -4042,6 +4058,7 @@ const char **input_keyboard_start_line(
    kb_line->enabled                  = true;
    kb_line->select_all               = false;
    kb_line->fixed                    = false;
+   kb_line->rtl                      = false;
    input_driver_st.osk_textbox_focus = false;
    input_text_entry_changed(true);
 
@@ -8413,6 +8430,7 @@ static bool input_keyboard_line_event(
          state->buffer[0] = '\0';
          state->ptr = state->size = 0;
          state->select_all = false;
+         state->rtl        = false;
          word = state->buffer;
       }
       else if (state->ptr && state->buffer)
@@ -8430,6 +8448,8 @@ static bool input_keyboard_line_event(
                state->buffer + ptr,
                state->size - ptr + 1);
          state->size -= ptr - state->ptr;
+         if (state->rtl)
+            state->rtl = input_keyboard_text_rtl(state->buffer, state->size);
 
          word     = state->buffer;
       }
@@ -17020,7 +17040,7 @@ bool input_driver_netplay_bsv_take_checkpoint(void)
    return true;
 }
 
-bool input_driver_netplay_bsv_next_frame(const void *state, size_t size,
+bool input_driver_netplay_bsv_next_frame(uint8_t **state, size_t *size,
       bool forced)
 {
    bool success;
@@ -17110,11 +17130,13 @@ bool input_config_get_winraw_player_lights(void)
 }
 #endif
 
+#ifdef HAVE_SDL3
 bool input_config_get_sdl3_system_keyboard(void)
 {
    settings_t *settings = config_get_ptr();
    return settings && settings->bools.input_sdl3_system_keyboard;
 }
+#endif
 
 /* Sensors are allowed; and they are, until the settings say not. */
 bool input_config_get_sensors_enable(void)
@@ -17508,6 +17530,20 @@ const char *input_driver_keyboard_line_view(size_t *cursor)
    if (cursor)
       *cursor = (line->ptr > line->size) ? line->size : line->ptr;
    return line->buffer;
+}
+
+unsigned input_driver_keyboard_line_state(void)
+{
+   const input_keyboard_line_t *line = &input_driver_st.keyboard_line;
+   return (line->select_all ? INPUT_KEYBOARD_LINE_SELECTED : 0)
+        | (line->rtl        ? INPUT_KEYBOARD_LINE_RTL      : 0);
+}
+
+void input_driver_keyboard_line_changed(void)
+{
+   input_keyboard_line_t *line = &input_driver_st.keyboard_line;
+   line->rtl = line->buffer
+      && input_keyboard_text_rtl(line->buffer, line->size);
 }
 
 bool input_driver_keyboard_line_selected(void)
@@ -21319,6 +21355,45 @@ static void input_keys_let_go(void)
                   RETRO_DEVICE_KEYBOARD);
 }
 
+/* ===== BEGIN input core key event ===== */
+/* A key for the core's keyboard callback, and for run-ahead's second
+ * instance, which polls on frames the running core does not and sees
+ * the key when it arrives there.
+ *
+ * While a replay plays, the core is given the recorded keys only:
+ * bsv_movie_poll() hands them over with @replayed set, and the input
+ * driver's keys are not passed on. A recording keeps what reaches the
+ * core here, after the frontend has taken its own, so on playback the
+ * keys go straight back to the core without passing that filter
+ * again. */
+void input_keyboard_event_core(bool down, unsigned code,
+      uint32_t character, uint16_t mod, bool replayed)
+{
+   runloop_state_t *runloop_st = runloop_state_get_ptr();
+#ifdef HAVE_BSV_MOVIE
+   input_driver_state_t *input_st = input_state_get_ptr();
+   if (BSV_MOVIE_IS_PLAYBACK_ON())
+   {
+      if (!replayed)
+         return;
+   }
+   else if (BSV_MOVIE_IS_RECORDING()
+         && !BSV_MOVIE_IS_NETPLAY(input_st->bsv_movie_state_handle)
+#ifdef HAVE_REWIND
+         && !state_manager_frame_is_reversed()
+#endif
+         )
+      bsv_movie_push_key_event(input_st->bsv_movie_state_handle,
+            down, mod, code, character);
+#endif
+   if (!runloop_st->frontend_key_event)
+      return;
+   runloop_st->frontend_key_event(down, code, character, mod);
+   if (runloop_st->secondary_key_event)
+      runloop_st->secondary_key_event(down, code, character, mod);
+}
+/* ===== END input core key event ===== */
+
 static void input_keyboard_event_now_act(bool down, unsigned code,
       uint32_t character, uint16_t mod, unsigned device)
 {
@@ -21596,24 +21671,9 @@ static void input_keyboard_event_now_act(bool down, unsigned code,
       if (*key_event)
       {
          if (*key_event == runloop_st->frontend_key_event)
-         {
-#ifdef HAVE_BSV_MOVIE
-            if (BSV_MOVIE_IS_RECORDING()
-                  && !BSV_MOVIE_IS_NETPLAY(input_st->bsv_movie_state_handle))
-#ifdef HAVE_REWIND
-               if (!state_manager_frame_is_reversed())
-#endif
-               bsv_movie_push_key_event(
-                     input_st->bsv_movie_state_handle, down, mod,
-                     code, character);
-#endif
-         }
-         (*key_event)(down, code, character, mod);
-         /* Run-ahead's second instance polls on frames the running
-          * core does not; it sees the event when it arrives there */
-         if (     *key_event == runloop_st->frontend_key_event
-               && runloop_st->secondary_key_event)
-            runloop_st->secondary_key_event(down, code, character, mod);
+            input_keyboard_event_core(down, code, character, mod, false);
+         else
+            (*key_event)(down, code, character, mod);
       }
    }
 }

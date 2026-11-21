@@ -1727,6 +1727,10 @@ bool companion_core_request_load_content(companion_core_t *core,
 
    if (!core || string_is_empty(core_path) || string_is_empty(content_path))
       return false;
+#ifdef HAVE_CORE_LOAD_CHECK
+   if (task_content_warning_waits(core_path))
+      return false;
+#endif
 
    /* Search for the specified core - ensures the path is sanitised. */
    if (core_info_find(core_path, &info) && !string_is_empty(info->path))
@@ -1770,33 +1774,33 @@ bool companion_core_start_core(companion_core_t *core)
    content_ctx_info_t content_info;
    if (!core)
       return false;
+#ifdef HAVE_CORE_LOAD_CHECK
+   if (task_content_warning_waits(path_get(RARCH_PATH_CORE)))
+      return false;
+#endif
    memset(&content_info, 0, sizeof(content_info));
-   path_clear(RARCH_PATH_BASENAME);
    return task_push_start_current_core(&content_info);
 }
 
 bool companion_core_load_core(companion_core_t *core, const char *path)
 {
 #ifdef HAVE_DYNAMIC
+   content_ctx_info_t content_info;
    if (!core || string_is_empty(path))
       return false;
-
-   path_set(RARCH_PATH_CORE, path);
-
-   command_event(CMD_EVENT_CORE_INFO_DEINIT, NULL);
-   command_event(CMD_EVENT_CORE_INFO_INIT, NULL);
-
-   core_info_init_current_core();
-
 #ifdef HAVE_CORE_LOAD_CHECK
-   if (command_event(CMD_EVENT_LOAD_CORE, NULL))
-      return true;
-   /* path may be the core list's, freed by the deinit above */
-   task_content_park_core_load(path_get(RARCH_PATH_CORE));
-   return false;
-#else
-   return command_event(CMD_EVENT_LOAD_CORE, NULL);
+   if (task_content_warning_waits(path))
+      return false;
 #endif
+   memset(&content_info, 0, sizeof(content_info));
+   /* As the menu's Load Core: the probe loads the core's info */
+   if (task_push_load_new_core(path, NULL, &content_info,
+            CORE_TYPE_PLAIN, NULL, NULL))
+      return true;
+#ifdef HAVE_CORE_LOAD_CHECK
+   task_content_park_core_load(path);
+#endif
+   return false;
 #else
    (void)core;
    (void)path;

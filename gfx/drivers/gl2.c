@@ -334,6 +334,20 @@ static GLuint gl2_linear_program(gl2_t *gl);
 #ifndef GL_SRGB_ALPHA_EXT
 #define GL_SRGB_ALPHA_EXT 0x8C42
 #endif
+
+/* GLES 3.0 */
+#ifndef GL_TEXTURE_SWIZZLE_R
+#define GL_TEXTURE_SWIZZLE_R  0x8E42
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_B
+#define GL_TEXTURE_SWIZZLE_B  0x8E44
+#endif
+#ifndef GL_RED
+#define GL_RED                0x1903
+#endif
+#ifndef GL_BLUE
+#define GL_BLUE               0x1905
+#endif
 #endif
 
 #define GL2_BIND_TEXTURE(id, wrap_mode, mag_filter, min_filter) \
@@ -432,6 +446,22 @@ static void gl2_free_pbo_readback(gl2_t *gl);
 
 #endif
 
+#if defined(HAVE_GLSL) || defined(HAVE_CG)
+#define MEDIA_GEN_FB gl2_gen_fb
+#define MEDIA_DELETE_FB gl2_delete_fb
+#define MEDIA_BIND_FB gl2_bind_fb
+#define MEDIA_FB_BINDING GL_FRAMEBUFFER_BINDING
+#define MEDIA_ATTACH(tex) gl2_fb_texture_2d(RARCH_GL_FRAMEBUFFER, RARCH_GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0)
+#define MEDIA_FB_COMPLETE() (gl2_check_fb_status(RARCH_GL_FRAMEBUFFER) == RARCH_GL_FRAMEBUFFER_COMPLETE)
+#define gl_media_target_free gl2_media_target_free
+#define gl_media_shader_free gl2_media_shader_free
+#define gl_media_target_fit gl2_media_target_fit
+#define gl_media_info gl2_media_info
+#define gl_media_scale gl2_media_scale
+#define gl_media_shader_draw gl2_media_shader_draw
+#include "../common/gl_media_shader.h"
+#endif
+
 #ifndef GL_SYNC_GPU_COMMANDS_COMPLETE
 #define GL_SYNC_GPU_COMMANDS_COMPLETE     0x9117
 #endif
@@ -459,7 +489,10 @@ enum gl2_renderchain_flags
    GL2_CHAIN_FLAG_EGL_IMAGES           = (1 << 0),
    GL2_CHAIN_FLAG_HAS_FP_FBO           = (1 << 1),
    GL2_CHAIN_FLAG_HAS_SRGB_FBO         = (1 << 2),
-   GL2_CHAIN_FLAG_HW_RENDER_DEPTH_INIT = (1 << 3)
+   GL2_CHAIN_FLAG_HW_RENDER_DEPTH_INIT = (1 << 3),
+   /* GLES 3 without BGRA8888: the frame textures swap R and B as they
+    * are sampled, so a 32-bit software frame goes up as it is */
+   GL2_CHAIN_FLAG_FRAME_SWIZZLE        = (1 << 4)
 };
 
 typedef struct video_shader_ctx_scale
@@ -3145,8 +3178,10 @@ static void gl2_renderchain_copy_frame(
       glPixelStorei(GL_UNPACK_ALIGNMENT,
             gl2_get_alignment(width * gl->base_size));
 
-      /* Fallback for GLES devices without GL_BGRA_EXT. */
-      if (gl->base_size == 4 && use_rgba)
+      /* Fallback for GLES devices without GL_BGRA_EXT, where the
+       * texture cannot swizzle */
+      if (     gl->base_size == 4 && use_rgba
+            && !(chain->flags & GL2_CHAIN_FLAG_FRAME_SWIZZLE))
       {
          video_frame_convert_argb8888_to_abgr8888(
                &gl->scaler,
@@ -4314,6 +4349,17 @@ static void gl2_init_textures(gl2_t *gl)
             gl, (gl2_renderchain_data_t*)gl->renderchain_data,
             i, internal_fmt,
             texture_fmt, texture_type);
+#if defined(HAVE_OPENGLES) && !defined(HAVE_PSGL)
+      /* BGRX bytes stored as RGBA: R and B put back as sampled */
+      if (     gl->base_size == sizeof(uint32_t)
+            && gl->renderchain_data
+            && (((gl2_renderchain_data_t*)gl->renderchain_data)->flags
+               & GL2_CHAIN_FLAG_FRAME_SWIZZLE))
+      {
+         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_BLUE);
+         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+      }
+#endif
    }
 
    glBindTexture(GL_TEXTURE_2D, gl->texture[gl->tex_index]);
@@ -7531,6 +7577,9 @@ static bool gl2_frame(void *data, const void *frame,
    width  = VIDEO_SCALE_W(gl->video_dims);
    height = VIDEO_SCALE_H(gl->video_dims);
 
+   gl->media_shader_enabled = video_info->shader_active;
+   gl->media_shader_frame = frame_count;
+
    if (gl->flags & GL2_FLAG_SHARED_CONTEXT_USE)
       gl->ctx_driver->bind_hw_render(gl->ctx_data, false);
 
@@ -8263,6 +8312,9 @@ static void gl2_free(void *data)
             gl->renderchain_data);
 
 
+#if defined(HAVE_GLSL) || defined(HAVE_CG)
+   gl2_media_shader_free(&gl->media_shader);
+#endif
    gl->shader->deinit(gl->shader_data);
 
    gl2_scrgb_deinit(gl);
@@ -8432,9 +8484,22 @@ static bool gl2_resolve_extensions(gl2_t *gl, const char *context_ident, const v
 #if defined(HAVE_OPENGLES) && !defined(HAVE_PSGL)
    if (!gl_check_capability(GL_CAPS_BGRA8888))
    {
+      gl2_renderchain_data_t *chain = (gl2_renderchain_data_t*)
+         gl->renderchain_data;
       video_driver_modify_disp_flags(VIDEO_FLAG_USE_RGBA, 0);
-      RARCH_WARN("[GL] GLES implementation does not have BGRA8888 extension.\n"
-                 "[GL] 32-bit path will require conversion.\n");
+      /* The frame textures swap R and B as they are sampled; a
+       * hardware core renders into them, so not for one */
+      if (     chain
+            && gl_check_capability(GL_CAPS_GLES3_SUPPORTED)
+            && !(gl->flags & GL2_FLAG_HW_RENDER_USE))
+      {
+         chain->flags |= GL2_CHAIN_FLAG_FRAME_SWIZZLE;
+         RARCH_LOG("[GL] GLES implementation does not have BGRA8888"
+               " extension; 32-bit frames are swizzled as sampled.\n");
+      }
+      else
+         RARCH_WARN("[GL] GLES implementation does not have BGRA8888 extension.\n"
+                    "[GL] 32-bit path will require conversion.\n");
    }
 #endif
 
@@ -9483,6 +9548,9 @@ static bool gl2_set_shader(void *data,
       goto error;
    }
 
+#if defined(HAVE_GLSL) || defined(HAVE_CG)
+   gl2_media_shader_free(&gl->media_shader);
+#endif
    gl->shader->deinit(gl->shader_data);
    gl->shader_data = NULL;
 
@@ -10182,7 +10250,10 @@ static bool gl2_frame_mem_uploads(gl2_t *gl)
       return false;
 #if defined(HAVE_OPENGLES)
    if (     (video_driver_get_disp_flags() & VIDEO_FLAG_USE_RGBA)
-         && gl->base_size == 4)
+         && gl->base_size == 4
+         && !(     gl->renderchain_data
+               && (((gl2_renderchain_data_t*)gl->renderchain_data)->flags
+                  & GL2_CHAIN_FLAG_FRAME_SWIZZLE)))
       return false;
    if (!(gl->flags & GL2_FLAG_HAVE_UNPACK_ROW_LENGTH))
       return false;
@@ -10929,6 +11000,18 @@ static void gfx_display_gl2_bloom_composite(void *data, unsigned dims)
 }
 #endif
 
+#if defined(HAVE_GLSL) || defined(HAVE_CG)
+static bool gfx_display_gl2_media_shader_draw(void *data, uintptr_t image,
+      unsigned source_dims, unsigned video_dims, unsigned pos, unsigned dims)
+{
+   gl2_t *gl = (gl2_t*)data;
+   (void)video_dims;
+   return gl && (gl->flags & GL2_FLAG_HAVE_FBO) && gl->media_shader_enabled &&
+      gl2_media_shader_draw(&gl->media_shader, gl, gl->shader, gl->shader_data,
+            image, source_dims, pos, dims, gl->media_shader_frame);
+}
+#endif
+
 gfx_display_ctx_driver_t gfx_display_ctx_gl = {
    gfx_display_gl2_draw,
    gfx_display_gl2_draw_pipeline,
@@ -10957,7 +11040,12 @@ gfx_display_ctx_driver_t gfx_display_ctx_gl = {
    NULL, NULL, NULL,
 #endif
 #ifdef GL2_EFFECTS
-   gfx_display_gl2_effect_install
+   gfx_display_gl2_effect_install,
+#else
+   NULL,
+#endif
+#if defined(HAVE_GLSL) || defined(HAVE_CG)
+   gfx_display_gl2_media_shader_draw
 #else
    NULL
 #endif

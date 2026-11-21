@@ -176,7 +176,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    char s_e011fe61[52];
 #endif
-   char s_4e447c6c[38];
    char s_d9a51d02[19];
    char s_12e77e8f[10];
    char s_da068369[6];
@@ -241,7 +240,9 @@ static const struct
    char s_bbb615a1[25];
    char s_8fc168f0[12];
    char s_213c44cf[13];
+   char s_4f4b0d00[6];
    char s_502f623c[7];
+   char s_223dfc81[7];
    char s_b6cd2ff0[49];
    char s_40e7aacd[8];
    char s_fe2b08f2[13];
@@ -982,9 +983,7 @@ static const struct
    char s_dcbf8b04[21];
    char s_dcbffdfe[21];
    char s_7816d5d5[30];
-   char s_2b1f17e8[26];
    char s_36c3acc7[32];
-   char s_b4c3612a[42];
    char s_f638f238[18];
    char s_f3358a59[30];
    char s_0d7d9688[32];
@@ -1841,6 +1840,8 @@ static const struct
    char s_579c3ea7[25];
    char s_cc7bf1b9[12];
    char s_b300fc03[20];
+   char s_e29ee11f[14];
+   char s_714b59b6[12];
    char s_ccf131c5[23];
    char s_e5124bba[8];
    char s_875bc33e[11];
@@ -2555,9 +2556,7 @@ static const struct
    char s_c5a76d72[45];
    char s_c5a7e06c[45];
    char s_37d36d03[54];
-   char s_eadbaf16[50];
    char s_54eaf5f5[41];
-   char s_7de5d198[66];
    char s_3b573ee6[27];
    char s_dc1d6cc7[40];
    char s_8b636a26[31];
@@ -3722,7 +3721,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    "Lataa ydin aina uudelleen kun sis\303\244lt\303\266 suoritetaan",
 #endif
-   "Android-yhteyden katkaisun kiertotapa",
    "Sovelluksen kuvake",
    "Resurssit",
    "Laite",
@@ -3787,6 +3785,8 @@ static const struct
    "Buildbotin resussien URL",
    "V\303\244limuisti",
    "Salli kamera",
+   "Laite",
+   "Kamera",
    "Kamera",
    "Saavutuksia ei voida aktivoida t\303\244ll\303\244 ytimell\303\244",
    "Huijaus",
@@ -4530,9 +4530,7 @@ static const struct
    "N\303\244yt\303\244 \"Lataa ydin\"",
    "N\303\244yt\303\244 \"Lataa levy\"",
    "N\303\244yt\303\244 \"Verkkop\303\244ivitt\303\244j\303\244\"",
-   "N\303\244yt\303\244 \"Sulje RetroArch\"",
    "N\303\244yt\303\244 \"K\303\244ynnist\303\244 uudelleen\"",
-   "N\303\244yt\303\244 \"K\303\244ynnist\303\244 RetroArch uudelleen\"",
    "N\303\244yt\303\244 'Sammuta'",
    "N\303\244yt\303\244 valikon alatunnisteet",
    "Yhden napsautuksen soittolistat",
@@ -5397,6 +5395,8 @@ static const struct
    "KK-PP-VVVV TT:MM (AM/PM)",
    "KK-PP TT:MM",
    "KK-PP TT:MM (AM/PM)",
+   "Automaattinen",
+   "Manuaalinen",
    "P\303\244iv\303\244n ja ajan tyyli",
    "VVVV-KK",
    "VVVV-KK-PP",
@@ -6323,10 +6323,7 @@ static const struct
    "N\303\244yt\303\244 \"Lataa levy\"-valinta p\303\244\303\244valikossa.",
    "N\303\244yt\303\244 \"Verkkop\303\244ivitt\303\244j\303\244\"-valinta p\303\244\303\244valikossa"
    ".",
-   "N\303\244yt\303\244 \"Sulje RetroArch\"-valinta p\303\244\303\244valikossa.",
    "N\303\244yt\303\244 \"K\303\244ynnist\303\244 uudelleen\"-valinta.",
-   "N\303\244yt\303\244 \"K\303\244ynnist\303\244 RetroArch uudelleen\"-valinta p\303\244\303\244val"
-   "ikossa.",
    "N\303\244yt\303\244 \"Sammuta\"-valinta.",
    "N\303\244yt\303\244 lis\303\244tietoja valikon kohteille.",
    "Muuta valikon \303\244\303\244niasetuksia.",
@@ -7574,7 +7571,7 @@ static const struct
  * compiler that pads this struct fails here instead of
  * misindexing at runtime. */
 typedef char msg_hash_fi_blob_check[
-      (sizeof(msg_hash_fi_blob) == (123342u
+      (sizeof(msg_hash_fi_blob) == (123159u
 #ifdef HAVE_LAKKA
        + 257u
 #endif
@@ -8076,7 +8073,6 @@ static const msg_hash_id_t msg_hash_fi_ids[] =
 #ifndef HAVE_DYNAMIC
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ALWAYS_RELOAD_CORE_ON_RUN_CONTENT,
 #endif
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ANDROID_INPUT_DISCONNECT_WORKAROUND,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_APPICON_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ASSETS_DIRECTORY,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_AUDIO_DEVICE,
@@ -8141,7 +8137,9 @@ static const msg_hash_id_t msg_hash_fi_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_BUILDBOT_ASSETS_URL,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CACHE_DIRECTORY,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_ALLOW,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DEVICE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DRIVER,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CANNOT_ACTIVATE_ACHIEVEMENTS_WITH_THIS_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT_ADDRESS,
@@ -8882,9 +8880,7 @@ static const msg_hash_id_t msg_hash_fi_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SINGLECLICK_PLAYLISTS,
@@ -9740,6 +9736,8 @@ static const msg_hash_id_t msg_hash_fi_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MDYYYY_HM_AMPM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MD_HM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MD_HM_AMPM,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_AUTOMATIC,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_MANUAL,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_STYLE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YMD,
@@ -10454,9 +10452,7 @@ static const msg_hash_id_t msg_hash_fi_ids[] =
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SOUNDS,

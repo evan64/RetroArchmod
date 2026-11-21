@@ -349,6 +349,8 @@ typedef struct shader_backend
 
    /* Human readable string. */
    const char *ident;
+   /* A borrowed preset drawing a viewer: zero restores core semantics. */
+   void (*set_media_source)(void *shader_data, unsigned dims);
 } shader_backend_t;
 
 typedef struct video_shader_ctx_params
@@ -574,6 +576,7 @@ typedef struct video_frame_info
     * whichever thread it is on. */
    uint64_t driver_pacing_id;
    uint64_t recording_gpu_timestamp;
+   uint64_t recording_pyrowave_duration;
    /* cpu_features_get_time_usec() as video_driver_frame() read it for
     * this frame: what anything drawn with the frame animates by, on
     * whichever thread draws it */
@@ -788,6 +791,10 @@ typedef struct video_frame_info
    bool gpu_recording;
    bool recording_gpu_pending;
    bool recording_gpu_capture;
+   bool recording_pyrowave;
+   bool recording_pyrowave_full_output;
+   bool recording_pyrowave_receive;
+   bool recording_pyrowave_clock_valid;
    /* Record Game Only: the driver reads the recording's frame back
     * before drawing any UI over it. */
    bool record_game_only;
@@ -1084,7 +1091,8 @@ enum video_device_api
    VIDEO_DEVICE_VULKAN,
    VIDEO_DEVICE_D3D11,
    VIDEO_DEVICE_D3D12,
-   VIDEO_DEVICE_METAL
+   VIDEO_DEVICE_METAL,
+   VIDEO_DEVICE_OPENGL
 };
 
 enum video_device_recording_cap
@@ -1103,16 +1111,21 @@ typedef struct video_device_info
    void *instance;
    void *physical_device;
    void *device;
-   /* Vulkan or D3D12 render queue, borrowed with the device. */
+   /* Vulkan/D3D12 render queue, or D3D11 immediate context; borrowed. */
    void *queue;
    /* Existing Vulkan queue serialization; cold render-owner jobs only. */
    void *queue_lock;
    /* Optional immutable recording device descriptor, owned by the renderer. */
    const void *recording;
    retro_proc_address_t get_instance_proc_addr;
+   retro_proc_address_t (*get_gl_proc_address)(const char *name);
+   /* Render-owner jobs: enter frontend context, then restore core context. */
+   void (*bind_gl_context)(void *data, bool enter);
    /* The driver's queue family: an image the driver imports is either
     * exclusive to it or shared with it (concurrent). */
    unsigned queue_family;
+   /* API-specific final output format and precision, for cold capture setup. */
+   unsigned output_format, output_bit_depth;
    /* image_pixfmt bits import_texture takes; 0 when it takes none. */
    uint32_t import_formats;
    uint32_t recording_caps;
@@ -1152,10 +1165,20 @@ typedef struct video_frame_import
    unsigned crop_x, crop_y;
    /* The producer's, for a consumer that will not have the frame read
     * after all: signals @done in the driver's place. The driver never
-    * calls it. NULL: nothing to do. */
+    * calls it for a GPU frame. NULL: nothing to do. */
    void (*abandon)(void *owner, uint64_t done, uint64_t done_value);
    void *owner;
+   /* A frame in memory (@planar.planes[0] set, @image 0): 8-bit 4:2:0
+    * planes the producer lends, @planar.yuv its colour space. Only
+    * import_movie_frame takes one, from a driver listing
+    * IMAGE_PIXFMT_I420 in video_device_info_t::import_formats; @abandon
+    * is the planes' release, which that driver calls once its upload
+    * has copied them, when it returns DONE - for any other answer the
+    * caller releases or retries them, as it would a GPU frame. */
+   struct texture_planar planar;
 } video_frame_import_t;
+
+#define VIDEO_FRAME_IMPORT_IS_CPU(f) ((f)->planar.planes[0] != NULL)
 
 /* A mapping is valid until frame() consumes it; renew on the driver thread. */
 typedef struct video_frame_memory
@@ -2920,6 +2943,9 @@ void *video_driver_get_menu_framebuffer(unsigned dims, bool rgb32,
 bool video_driver_get_device(video_device_info_t *info);
 struct video_hw_frame;
 bool video_driver_movie_refresh(void *user, const struct video_hw_frame *frame);
+/* The same for a frame in memory (video_hw_frame_t::planes): NULL asks
+ * whether the driver takes such frames now. */
+bool video_driver_movie_planes(void *user, const struct video_hw_frame *frame);
 void video_driver_movie_clear(void);
 
 enum video_texture_update video_driver_texture_import(uintptr_t *id,
@@ -3301,6 +3327,7 @@ extern video_driver_t video_ps2;
 extern video_driver_t video_ctr;
 extern video_driver_t video_gcm;
 extern video_driver_t video_switch;
+extern video_driver_t video_deko3d;
 extern video_driver_t video_d3d8;
 extern video_driver_t video_d3d9_cg;
 extern video_driver_t video_d3d9_hlsl;
@@ -3364,6 +3391,7 @@ extern const gfx_ctx_driver_t gfx_ctx_emscripten;
 extern const gfx_ctx_driver_t gfx_ctx_emscripten_webgl;
 extern const gfx_ctx_driver_t gfx_ctx_opendingux_fbdev;
 extern const gfx_ctx_driver_t gfx_ctx_khr_display;
+extern const gfx_ctx_driver_t gfx_ctx_switch_vk;
 extern const gfx_ctx_driver_t gfx_ctx_gdi;
 extern const gfx_ctx_driver_t gfx_ctx_fpga;
 extern const gfx_ctx_driver_t gfx_ctx_sixel;

@@ -44,6 +44,7 @@
 #include "menu_displaylist.h"
 #include "menu_cbs.h"
 #include "menu_driver.h"
+#include "menu_timedate.h"
 #include "menu_input.h"
 #if defined(HAVE_CG) || defined(HAVE_GLSL) || defined(HAVE_SLANG) || defined(HAVE_HLSL)
 #include "menu_shader.h"
@@ -118,6 +119,10 @@ void android_app_set_window_settings(bool notch_write_over,
 #include "../location_driver.h"
 #include "../network/cloud_sync_driver.h"
 #include "../record/record_driver.h"
+#ifdef HAVE_PYROWAVE
+#include "../record/record_pyrowave_lan.h"
+#include "../record/record_pyrowave_receiver.h"
+#endif
 #include "../tasks/tasks_internal.h"
 #if defined(HAVE_KEYCHAIN) && defined(HAVE_CRYPTO) && defined(HAVE_CONFIGFILE)
 #include <file/keychain.h>
@@ -5128,6 +5133,17 @@ static void setting_set_string_representation_timedate_date_separator(char *s)
    }
 }
 
+static size_t setting_get_string_representation_uint_menu_timedate_mode(
+   rarch_setting_t *setting, char *s, size_t len)
+{
+   if (!setting)
+      return 0;
+   return strlcpy(s, msg_hash_to_str(
+         (*setting->value.target.unsigned_integer == MENU_TIMEDATE_MODE_MANUAL)
+         ? MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_MANUAL
+         : MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_AUTOMATIC), len);
+}
+
 static size_t setting_get_string_representation_uint_menu_timedate_style(
    rarch_setting_t *setting, char *s, size_t len)
 {
@@ -5828,10 +5844,107 @@ static size_t setting_get_string_representation_uint_pix16_transition(
                   msg_hash_to_str(
                      MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_ZOOM),
                   len);
+         case PIX16_TRANSITION_IRIS:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_IRIS),
+                  len);
+         case PIX16_TRANSITION_WIPE:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_WIPE),
+                  len);
+         case PIX16_TRANSITION_DISSOLVE:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_DISSOLVE),
+                  len);
+         case PIX16_TRANSITION_SPLIT:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_SPLIT),
+                  len);
+         case PIX16_TRANSITION_BLAST:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_BLAST),
+                  len);
+         case PIX16_TRANSITION_ROLL:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_ROLL),
+                  len);
+         case PIX16_TRANSITION_STATIC:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_STATIC),
+                  len);
          case PIX16_TRANSITION_RANDOM:
             return strlcpy(s,
                   msg_hash_to_str(
                      MENU_ENUM_LABEL_VALUE_PIX16_TRANSITION_RANDOM),
+                  len);
+      }
+   }
+   return 0;
+}
+
+static size_t setting_get_string_representation_uint_pix16_background(
+      rarch_setting_t *setting, char *s, size_t len)
+{
+   if (setting)
+   {
+      switch (*setting->value.target.unsigned_integer)
+      {
+         case PIX16_BACKGROUND_DIAMONDS:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_DIAMONDS),
+                  len);
+         case PIX16_BACKGROUND_MODE7:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_MODE7),
+                  len);
+         case PIX16_BACKGROUND_STARS:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_STARS),
+                  len);
+         case PIX16_BACKGROUND_WAVY:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_WAVY),
+                  len);
+         case PIX16_BACKGROUND_WATER:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_WATER),
+                  len);
+         case PIX16_BACKGROUND_CLOUDS:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_CLOUDS),
+                  len);
+         case PIX16_BACKGROUND_PLASMA:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_PLASMA),
+                  len);
+         case PIX16_BACKGROUND_RAIN:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_RAIN),
+                  len);
+         case PIX16_BACKGROUND_SNOW:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_SNOW),
+                  len);
+         case PIX16_BACKGROUND_COPPER:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_BACKGROUND_COPPER),
                   len);
       }
    }
@@ -5884,6 +5997,41 @@ static size_t setting_get_string_representation_uint_pix16_palette(
             return strlcpy(s,
                   msg_hash_to_str(
                      MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_CRIMSON),
+                  len);
+         case PIX16_PALETTE_COBALT:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_COBALT),
+                  len);
+         case PIX16_PALETTE_FOREST:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_FOREST),
+                  len);
+         case PIX16_PALETTE_PLUM:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_PLUM),
+                  len);
+         case PIX16_PALETTE_SAKURA:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_SAKURA),
+                  len);
+         case PIX16_PALETTE_OCEAN:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_OCEAN),
+                  len);
+         case PIX16_PALETTE_COPPER:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_COPPER),
+                  len);
+         case PIX16_PALETTE_MIDNIGHT:
+            return strlcpy(s,
+                  msg_hash_to_str(
+                     MENU_ENUM_LABEL_VALUE_PIX16_PALETTE_MIDNIGHT),
                   len);
       }
    }
@@ -11401,6 +11549,22 @@ static void general_write_handler(rarch_setting_t *setting)
 
    switch (setting->enum_idx)
    {
+#ifdef HAVE_PYROWAVE
+      case MENU_ENUM_LABEL_PYROWAVE_DISCOVERY_ENABLE:
+         if (!settings->bools.pyrowave_discovery_enable)
+         {
+            if (record_pyrowave_lan_sending()) command_event(CMD_EVENT_RECORD_DEINIT, NULL);
+            record_pyrowave_lan_stop();
+            if (record_pyrowave_receiver_port()) record_pyrowave_receiver_stop();
+         }
+         break;
+      case MENU_ENUM_LABEL_PYROWAVE_DEVICE_NAME:
+      case MENU_ENUM_LABEL_PYROWAVE_SHADER_DIRECTORY:
+         if (record_pyrowave_lan_sending()) command_event(CMD_EVENT_RECORD_DEINIT, NULL);
+         record_pyrowave_lan_stop();
+         record_pyrowave_receiver_stop();
+         break;
+#endif
       case MENU_ENUM_LABEL_VIDEO_GPU_INDEX:
          video_driver_gpu_index_select(video_context_driver_get_api(),
                *setting->value.target.integer);
@@ -12938,6 +13102,8 @@ static void timezone_change_handler(rarch_setting_t *setting)
       return;
 
    config_set_timezone(setting->value.target.string);
+   menu_state_get_ptr()->timedate_zone_order =
+         (uint8_t)menu_timedate_host_order();
 
    if ((tzfp = filestream_open(LAKKA_TIMEZONE_PATH,
                RETRO_VFS_FILE_ACCESS_WRITE,
@@ -15939,10 +16105,14 @@ static void settings_build_main_menu(
 #endif
 
             ADD_DESC(mm_desc_15);
+      /* MIDI, its first row, with a MIDI driver; Camera and its
+       * Preview, the rows after it, always */
       if (string_is_not_equal(settings->arrays.midi_driver, "null"))
-      {
-            ADD_DESC(mm_desc_16);
-      }
+         settings_list_add_desc(list, list_info, settings,
+               mm_desc_16, 1, &group_info, &subgroup_info, parent_group);
+      settings_list_add_desc(list, list_info, settings,
+            mm_desc_16 + 1, (unsigned)ARRAY_SIZE(mm_desc_16) - 1,
+            &group_info, &subgroup_info, parent_group);
 
       for (user = 0; user < MAX_USERS; user++)
          setting_append_list_input_player_options(list, list_info, parent_group, user);
@@ -17505,9 +17675,14 @@ static void settings_build_video(
          }
 #endif
 #ifdef HAVE_VULKAN_CUSTOM_DRIVER
-         /* Any video driver: HW cores force Vulkan under gl too */
+         /* Any video driver: HW cores force Vulkan under gl too. The
+          * desktop asks the loader at Vulkan init instead. */
+#ifdef ANDROID
          if (vulkan_custom_driver_supported())
             ADD_DESC(vulkan_driver_desc);
+#else
+         ADD_DESC(vulkan_driver_desc);
+#endif
 #endif
 
 #ifdef HAVE_D3D10

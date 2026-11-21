@@ -36,7 +36,22 @@
  *  - Settings > Core > Check Core Signatures: Off asks even with
  *    confirmations off and Back keeps the checks; On and Start ask
  *    nothing; a read-only store changes nothing; an inactive one hides
- *    the row.
+ *    the row;
+ *  - a load from outside the menu while the box is up is refused and
+ *    says to answer first; the request and the paths stay as they were,
+ *    and LOAD_CONTENT's core is not probed;
+ *  - Manage Cores > a core > Core Trust says why the core loads without
+ *    a warning; selecting Trusted by you stops trusting it, and nothing
+ *    else changes anything; the row hides with the checks off or the
+ *    store inactive;
+ *  - Manage Cores > a core > Delete core takes its hash off the trusted
+ *    list;
+ *  - a store that couldn't be read, or that a newer RetroArch saved:
+ *    the box says why trusted cores ask again, Untrust says it lasts
+ *    for this session, and Check Core Signatures names the newer one;
+ *    with no store at all the box says neither;
+ *  - a store whose saves fail: Untrust says it lasts for this session,
+ *    and its own failed save adds nothing.
  *
  * Requires a completed non-Qt build:
  *
@@ -56,6 +71,7 @@
 #include <lists/file_list.h>
 #include <time/rtime.h>
 #include <queues/task_queue.h>
+#include <streams/file_stream.h>
 #include <string/stdstring.h>
 #include <compat/strl.h>
 #include <retro_timers.h>
@@ -79,6 +95,9 @@
 #include "../../../msg_hash.h"
 #include "../../../msg_hash_lbl_str.h"
 #include "../../../core_trust_runtime.h"
+#include "../../../core_load_check.h"
+#include "../../../paths.h"
+#include "../../../tasks/task_content.h"
 
 static unsigned failures = 0;
 
@@ -195,6 +214,7 @@ static size_t stack_size(void)
    return menu_list ? MENU_LIST_GET(menu_list, 0)->size : 0;
 }
 
+/* The entry as menu_driver_iterate() fetches it for an action */
 static void act_on(size_t i, enum menu_action action)
 {
    menu_entry_t entry;
@@ -203,11 +223,8 @@ static void act_on(size_t i, enum menu_action action)
    menu_state_get_ptr()->selection_ptr = i;
    MENU_ENTRY_INITIALIZE(entry);
    entry.flags |= MENU_ENTRY_FLAG_PATH_ENABLED
-                | MENU_ENTRY_FLAG_LABEL_ENABLED
-                | MENU_ENTRY_FLAG_RICH_LABEL_ENABLED
-                | MENU_ENTRY_FLAG_VALUE_ENABLED
-                | MENU_ENTRY_FLAG_SUBLABEL_ENABLED;
-   menu_entry_get(&entry, 0, i, NULL, true);
+                | MENU_ENTRY_FLAG_LABEL_ENABLED;
+   menu_entry_get(&entry, 0, i, NULL, false);
    menu_entry_action(&entry, i, action);
 }
 
@@ -287,6 +304,9 @@ static void lane_open(void)
          && box_says(MSG_CORE_WARNING_FULL_ACCESS)
          && box_says(MSG_CORE_WARNING_TURN_OFF),
          "open: the box text lacks a part");
+   CHECK(   !box_says(MSG_CORE_WARNING_STORE_UNREADABLE)
+         && !box_says(MSG_CORE_WARNING_STORE_NEWER),
+         "open: the box blames a store that loaded");
    /* English is about 344 B of the 1024; a translation twice the bytes
     * still fits whole */
    CHECK(strlen(MENU_STATE_TEXT(menu_state_get_ptr()->driver_data)) < 512,
@@ -1670,9 +1690,686 @@ static void lane_narration(void)
 }
 #endif
 
+/* Drains the OSD queue: whether it held msg */
+static bool osd_queued(enum msg_hash_enums msg)
+{
+   runloop_state_t *runloop_st = runloop_state_get_ptr();
+   const char *want            = msg_hash_to_str(msg);
+   msg_queue_entry_t entry;
+   bool found                  = false;
+   while (msg_queue_extract(&runloop_st->msg_queue, &entry))
+      if (string_is_equal(entry.msg, want))
+         found = true;
+   runloop_st->msg_queue_size = 0;
+   return found;
+}
+
+/* A companion UI's or a network command's load while the box is up is
+ * refused before it writes anything */
+static void lane_outside_load(const char *dir)
+{
+   char core[512];
+   char content[512];
+   char store[512];
+   char outside[512];
+   content_ctx_info_t info;
+   bool new_core;
+   bool current_core;
+   bool load_core  = false;
+   bool start_core = false;
+   bool load_content = false;
+#ifdef HAVE_COMMAND
+   char outside_core[512];
+   char load_arg[1040];
+   command_t cmd;
+   FILE *f;
+#endif
+   unsigned i;
+
+   /* lane_setting closed the store */
+   strlcpy(store, dir, sizeof(store));
+   strlcat(store, "/core_trust", sizeof(store));
+   CHECK(core_trust_runtime_init(store, NULL, NULL)
+         && core_trust_runtime_active(),
+         "fixture: the store didn't open again");
+   memset(&info, 0, sizeof(info));
+   strlcpy(outside, dir, sizeof(outside));
+   strlcat(outside, "/outside.bin", sizeof(outside));
+   menu_entries_flush_stack(MENU_ENUM_LABEL_MAIN_MENU_STR, 0);
+   push(&seen_a, CORE_WARNING_LOAD, 0x80, CORE_CHECK_UNSIGNED);
+   pump(3);
+   CHECK(shown(), "outside: the box isn't up");
+   strlcpy(core, path_get(RARCH_PATH_CORE), sizeof(core));
+   strlcpy(content, path_get(RARCH_PATH_CONTENT), sizeof(content));
+   osd_queued(MSG_CORE_WARNING_ANSWER_FIRST);
+
+   new_core = task_push_load_content_with_new_core_from_companion_ui(
+         "/cores/x_libretro.so", outside, NULL, NULL, NULL, &info,
+         NULL, NULL);
+   CHECK(!new_core, "an outside load went ahead under a Security Warning");
+   CHECK(     string_is_equal(path_get(RARCH_PATH_CORE), core)
+           && string_is_equal(path_get(RARCH_PATH_CONTENT), content),
+         "outside: a refused load with a new core wrote the paths");
+   CHECK(core_warning_pending(NULL, NULL),
+         "outside: a load with a new core dropped the request");
+   CHECK(osd_queued(MSG_CORE_WARNING_ANSWER_FIRST),
+         "outside: a load with a new core didn't say to answer first");
+
+   strlcpy(core, path_get(RARCH_PATH_CORE), sizeof(core));
+   strlcpy(content, path_get(RARCH_PATH_CONTENT), sizeof(content));
+   current_core = task_push_load_content_with_current_core_from_companion_ui(
+         outside, &info, CORE_TYPE_PLAIN, NULL, NULL);
+   CHECK(!current_core,
+         "an outside load went ahead under a Security Warning");
+   CHECK(     string_is_equal(path_get(RARCH_PATH_CORE), core)
+           && string_is_equal(path_get(RARCH_PATH_CONTENT), content),
+         "outside: a refused load with the current core wrote the paths");
+   CHECK(core_warning_pending(NULL, NULL),
+         "outside: a load with the current core dropped the request");
+   CHECK(osd_queued(MSG_CORE_WARNING_ANSWER_FIRST),
+         "outside: a load with the current core didn't say to answer first");
+
+#ifdef HAVE_COMMAND
+   /* Unsigned: its probe is refused and its load parks */
+   strlcpy(outside_core, dir, sizeof(outside_core));
+   strlcat(outside_core, "/outside_libretro.so", sizeof(outside_core));
+   if ((f = fopen(outside_core, "wb")))
+   {
+      fputs("not a core", f);
+      fclose(f);
+   }
+   memset(&cmd, 0, sizeof(cmd));
+   cmd.replier = syn_cmd_reply;
+
+   strlcpy(core, path_get(RARCH_PATH_CORE), sizeof(core));
+   strlcpy(content, path_get(RARCH_PATH_CONTENT), sizeof(content));
+   syn_reply[0] = '\0';
+   load_core    = command_load_core(&cmd, outside_core);
+   pump(3);
+   CHECK(!load_core, "LOAD_CORE went ahead under a Security Warning");
+   CHECK(     string_is_equal(path_get(RARCH_PATH_CORE), core)
+           && string_is_equal(path_get(RARCH_PATH_CONTENT), content),
+         "outside: a refused LOAD_CORE wrote the paths");
+   CHECK(seen_a.calls == 0 && core_warning_pending(NULL, NULL),
+         "outside: LOAD_CORE dropped the request");
+   CHECK(osd_queued(MSG_CORE_WARNING_ANSWER_FIRST),
+         "outside: LOAD_CORE didn't say to answer first");
+   CHECK(string_starts_with(syn_reply, "LOAD_CORE ERROR"),
+         "outside: a refused LOAD_CORE didn't reply with an error");
+
+   /* A running game's, which Start Core would clear */
+   strlcpy(core, path_get(RARCH_PATH_CORE), sizeof(core));
+   strlcpy(content, path_get(RARCH_PATH_CONTENT), sizeof(content));
+   path_set(RARCH_PATH_CONTENT, outside);
+   syn_reply[0] = '\0';
+   start_core   = command_start_core(&cmd, "");
+   pump(3);
+   CHECK(!start_core, "START_CORE went ahead under a Security Warning");
+   CHECK(     string_is_equal(path_get(RARCH_PATH_CORE), core)
+           && string_is_equal(path_get(RARCH_PATH_CONTENT), outside),
+         "outside: a refused START_CORE wrote the paths");
+   CHECK(seen_a.calls == 0 && core_warning_pending(NULL, NULL),
+         "outside: START_CORE dropped the request");
+   CHECK(osd_queued(MSG_CORE_WARNING_ANSWER_FIRST),
+         "outside: START_CORE didn't say to answer first");
+   CHECK(string_starts_with(syn_reply, "START_CORE ERROR"),
+         "outside: a refused START_CORE didn't reply with an error");
+   path_set(RARCH_PATH_CONTENT, content);
+
+   /* Refused before its core is probed: the probe would put that core
+    * through the load check while the box waits */
+   if ((f = fopen(outside, "wb")))
+   {
+      fputs("content", f);
+      fclose(f);
+   }
+   snprintf(load_arg, sizeof(load_arg), "%s|%s", outside_core, outside);
+   strlcpy(core, path_get(RARCH_PATH_CORE), sizeof(core));
+   strlcpy(content, path_get(RARCH_PATH_CONTENT), sizeof(content));
+   syn_reply[0] = '\0';
+   load_content = command_load_content(&cmd, load_arg);
+   pump(3);
+   CHECK(!load_content, "LOAD_CONTENT went ahead under a Security Warning");
+   CHECK(!core_load_check_refused(outside_core),
+         "outside: a refused LOAD_CONTENT probed its core first");
+   CHECK(     string_is_equal(path_get(RARCH_PATH_CORE), core)
+           && string_is_equal(path_get(RARCH_PATH_CONTENT), content),
+         "outside: a refused LOAD_CONTENT wrote the paths");
+   CHECK(seen_a.calls == 0 && core_warning_pending(NULL, NULL),
+         "outside: LOAD_CONTENT dropped the request");
+   CHECK(osd_queued(MSG_CORE_WARNING_ANSWER_FIRST),
+         "outside: LOAD_CONTENT didn't say to answer first");
+   CHECK(string_starts_with(syn_reply, "LOAD_CONTENT ERROR"),
+         "outside: a refused LOAD_CONTENT didn't reply with an error");
+   remove(outside);
+#endif
+
+   answer(MENU_ACTION_CANCEL);
+   CHECK(seen_a.calls == 1 && seen_a.choice == CORE_WARNING_CANCEL,
+         "outside: Back didn't answer the request once");
+   for (i = 0; (new_core || current_core || load_core || start_core
+         || load_content)
+         && i < 600 && task_content_load_pending(); i++)
+      pump(1);
+#ifdef HAVE_COMMAND
+   remove(outside_core);
+#endif
+}
+
+/* The first row of an entry type, NO_ROW if none */
+static size_t row_type(unsigned type)
+{
+   file_list_t *buf = selection_buf();
+   size_t i;
+   for (i = 0; buf && i < buf->size; i++)
+      if (buf->list[i].type == type)
+         return i;
+   return NO_ROW;
+}
+
+/* A Manage Cores entry's OK */
+static void push_core_page(const char *core)
+{
+   generic_action_ok_displaylist_push(core, NULL, "",
+         MENU_SETTING_ACTION_CORE_MANAGER_OPTIONS, 0, 0,
+         ACTION_OK_DL_CORE_INFORMATION_LIST);
+   pump(3);
+}
+
+/* What a core's page leaves: its backup list's folder, and cores */
+static void remove_cores_folder(const char *cores, const char *name)
+{
+   char path[512];
+   strlcpy(path, cores, sizeof(path));
+   strlcat(path, "/core_backups/", sizeof(path));
+   strlcat(path, name, sizeof(path));
+   path_rmdir(path);
+   strlcpy(path, cores, sizeof(path));
+   strlcat(path, "/core_backups", sizeof(path));
+   path_rmdir(path);
+   path_rmdir(cores);
+}
+
+static void check_core(const char *core, struct core_check *c)
+{
+   size_t num_keys     = 0;
+   const uint8_t *keys = core_sig_builtin_keys(&num_keys);
+   core_trust_set_t *s = core_trust_runtime_get();
+   memset(c, 0, sizeof(*c));
+   if (s)
+      core_check_file(s, keys, num_keys, core, 0, c);
+   core_trust_set_put(s);
+}
+
+/* The Security Warning's Always Trust; what the core's record says after */
+static enum core_trust_state trust_core(const char *core,
+      struct core_check *c)
+{
+   enum core_trust_state state = CORE_TRUST_STATE_UNCHECKED;
+   core_trust_set_t *s;
+   check_core(core, c);
+   core_trust_runtime_always(c);
+   if ((s = core_trust_runtime_get()))
+      state = core_trust_state_file(s, core, NULL);
+   core_trust_set_put(s);
+   return state;
+}
+
+static bool hash_trusted(const uint8_t *sha256)
+{
+   core_trust_set_t *s = core_trust_runtime_get();
+   bool has            = s && core_trust_has_hash(s, sha256);
+   core_trust_set_put(s);
+   return has;
+}
+
+/* The Core Trust row is there, showing value and sublabel's text */
+static bool trust_row_says(const char *value, enum msg_hash_enums sublabel)
+{
+   menu_entry_t entry;
+   size_t i = row_type(MENU_SETTING_ACTION_CORE_TRUST);
+   if (i == NO_ROW)
+      return false;
+   MENU_ENTRY_INITIALIZE(entry);
+   entry.flags |= MENU_ENTRY_FLAG_PATH_ENABLED
+                | MENU_ENTRY_FLAG_VALUE_ENABLED
+                | MENU_ENTRY_FLAG_SUBLABEL_ENABLED;
+   menu_entry_get(&entry, 0, i, NULL, true);
+   return   string_is_equal(entry.path, "Core Trust")
+         && string_is_equal(entry.value, value)
+         && string_is_equal(entry.sublabel, msg_hash_to_str(sublabel));
+}
+
+/* action on the Core Trust row: the message it put up, NULL for none;
+ * *changed when the store's set changed */
+static const char *trust_row_press(enum menu_action action, bool *changed)
+{
+   runloop_state_t *runloop_st = runloop_state_get_ptr();
+   core_trust_set_t *before    = core_trust_runtime_get();
+   core_trust_set_t *after;
+   const char *msg;
+   msg_queue_clear(&runloop_st->msg_queue);
+   act_on(row_type(MENU_SETTING_ACTION_CORE_TRUST), action);
+   msg      = msg_queue_pull(&runloop_st->msg_queue);
+   after    = core_trust_runtime_get();
+   *changed = after != before;
+   core_trust_set_put(after);
+   core_trust_set_put(before);
+   return msg;
+}
+
+/* Manage Cores > core > Core Trust */
+static void lane_core_trust(const char *dir)
+{
+   static char data[4096];
+   static const enum menu_action keys[] = {
+      MENU_ACTION_OK, MENU_ACTION_LEFT, MENU_ACTION_RIGHT, MENU_ACTION_START
+   };
+   static const char *const key_names[] = { "OK", "Left", "Right", "Start" };
+   struct core_check c;
+   char cores[512];
+   char core[512];
+   char what[96];
+   const char *msg;
+   bool changed;
+   size_t i;
+   unsigned k;
+   FILE *f;
+   strlcpy(cores, dir, sizeof(cores));
+   strlcat(cores, "/cores", sizeof(cores));
+   strlcpy(core, cores, sizeof(core));
+   strlcat(core, "/trust_libretro.so", sizeof(core));
+   memset(data, 0x7e, sizeof(data));
+   CHECK(path_mkdir(cores), "fixture: can't make the cores folder");
+   f = fopen(core, "wb");
+   CHECK(f && fwrite(data, 1, sizeof(data), f) == sizeof(data),
+         "fixture: can't write the core");
+   if (f)
+      fclose(f);
+
+   push_core_page(core);
+   i = row_type(MENU_SETTING_ACTION_CORE_TRUST);
+   CHECK(i != NO_ROW && i == row_type(MENU_SETTING_ACTION_CORE_LOCK) + 1,
+         "core trust: no row right after Lock core");
+   CHECK(trust_row_says("Not checked yet", MENU_ENUM_SUBLABEL_CORE_TRUST),
+         "core trust: an unchecked core doesn't say Not checked yet");
+   for (k = 0; k < sizeof(keys) / sizeof(keys[0]); k++)
+   {
+      msg = trust_row_press(keys[k], &changed);
+      strlcpy(what, "core trust: Not checked yet acted on ", sizeof(what));
+      strlcat(what, key_names[k], sizeof(what));
+      CHECK(!changed && !msg, what);
+   }
+
+   core_trust_runtime_set_checks(false);
+   push_core_page(core);
+   CHECK(row_type(MENU_SETTING_ACTION_CORE_LOCK) != NO_ROW
+         && row_type(MENU_SETTING_ACTION_CORE_TRUST) == NO_ROW,
+         "core trust: the row shows with the checks off");
+   core_trust_runtime_set_checks(true);
+
+   if (trust_core(core, &c) != CORE_TRUST_STATE_TRUSTED)
+   {
+      fprintf(stderr, "note: lane_core_trust skipped, no records in %s\n",
+            dir);
+      remove(core);
+      remove_cores_folder(cores, "trust_libretro");
+      return;
+   }
+   push_core_page(core);
+   CHECK(trust_row_says("Trusted by you",
+            MENU_ENUM_SUBLABEL_CORE_TRUST_TRUSTED),
+         "core trust: a trusted core doesn't say Trusted by you");
+   msg = trust_row_press(MENU_ACTION_OK, &changed);
+   CHECK(msg && string_is_equal(msg,
+            msg_hash_to_str(MSG_CORE_TRUST_FORGOTTEN)),
+         "core trust: OK didn't say the core is no longer trusted");
+   CHECK(!hash_trusted(c.rec.sha256), "core trust: OK left its hash trusted");
+   pump(3);
+   CHECK(trust_row_says("Not checked yet", MENU_ENUM_SUBLABEL_CORE_TRUST),
+         "core trust: the row didn't change to Not checked yet");
+   /* Only OK takes the trust back: this page binds Left and Right to
+    * scrolling, Lock core's too, and Start does nothing here */
+   CHECK(trust_core(core, &c) == CORE_TRUST_STATE_TRUSTED,
+         "fixture: can't trust the core again");
+   for (k = 1; k <= 3; k++)
+   {
+      msg = trust_row_press(keys[k], &changed);
+      strlcpy(what, "core trust: Trusted by you acted on ", sizeof(what));
+      strlcat(what, key_names[k], sizeof(what));
+      CHECK(!changed && !msg && hash_trusted(c.rec.sha256), what);
+   }
+   trust_row_press(MENU_ACTION_OK, &changed);
+   CHECK(!hash_trusted(c.rec.sha256), "core trust: OK left its hash trusted");
+   pump(3);
+
+   /* A row built before the trust went: OK says nothing, and the row
+    * shows what is so now */
+   CHECK(trust_core(core, &c) == CORE_TRUST_STATE_TRUSTED,
+         "fixture: can't trust the core again");
+   push_core_page(core);
+   CHECK(core_trust_runtime_forget(core), "fixture: can't untrust the core");
+   CHECK(trust_row_says("Trusted by you",
+            MENU_ENUM_SUBLABEL_CORE_TRUST_TRUSTED),
+         "fixture: the row isn't stale");
+   msg = trust_row_press(MENU_ACTION_OK, &changed);
+   CHECK(!changed && !msg, "core trust: OK on a stale row acted");
+   pump(3);
+   CHECK(trust_row_says("Not checked yet", MENU_ENUM_SUBLABEL_CORE_TRUST),
+         "core trust: a stale row kept Trusted by you");
+
+   check_core(core, &c);
+   c.result         = CORE_CHECK_OK;
+   c.record         = true;
+   c.rec.build_time = 1;
+   c.raise_newest   = false;
+   CHECK(core_trust_runtime_apply(&c), "fixture: can't record a signed build");
+   push_core_page(core);
+   CHECK(trust_row_says("Signed by libretro",
+            MENU_ENUM_SUBLABEL_CORE_TRUST_SIGNED),
+         "core trust: a signed core doesn't say Signed by libretro");
+   msg = trust_row_press(MENU_ACTION_OK, &changed);
+   CHECK(!changed && !msg, "core trust: OK on Signed by libretro acted");
+
+   remove(core);
+   remove_cores_folder(cores, "trust_libretro");
+}
+
+/* Manage Cores > core > Delete core drops the core's hash */
+static void lane_core_delete(const char *dir)
+{
+   static char data[4096];
+   struct core_check c;
+   char cores[512];
+   char core[512];
+   size_t num_keys     = 0;
+   const uint8_t *keys = core_sig_builtin_keys(&num_keys);
+   enum core_trust_state state = CORE_TRUST_STATE_UNCHECKED;
+   core_trust_set_t *s;
+   FILE *f;
+   memset(&c, 0, sizeof(c));
+   strlcpy(cores, dir, sizeof(cores));
+   strlcat(cores, "/cores", sizeof(cores));
+   strlcpy(core, cores, sizeof(core));
+   strlcat(core, "/del_libretro.so", sizeof(core));
+   memset(data, 0x5d, sizeof(data));
+   CHECK(path_mkdir(cores), "fixture: can't make the cores folder");
+   f = fopen(core, "wb");
+   CHECK(f && fwrite(data, 1, sizeof(data), f) == sizeof(data),
+         "fixture: can't write the core");
+   if (f)
+      fclose(f);
+   if ((s = core_trust_runtime_get()))
+   {
+      core_check_file(s, keys, num_keys, core, 0, &c);
+      core_trust_set_put(s);
+      core_trust_runtime_always(&c);
+   }
+   if ((s = core_trust_runtime_get()))
+   {
+      state = core_trust_state_file(s, core, NULL);
+      core_trust_set_put(s);
+   }
+   if (state != CORE_TRUST_STATE_TRUSTED)
+   {
+      fprintf(stderr, "note: lane_core_delete skipped, no records in %s\n",
+            dir);
+      remove(core);
+      path_rmdir(cores);
+      return;
+   }
+   push_core_page(core);
+   CHECK(row_type(MENU_SETTING_ACTION_CORE_DELETE) != NO_ROW,
+         "fixture: the core's page has no Delete core");
+   ok_on(row_type(MENU_SETTING_ACTION_CORE_DELETE));
+   pump(3);
+   CHECK(!path_is_valid(core), "core delete: the core is still there");
+   s = core_trust_runtime_get();
+   CHECK(s && !core_trust_has_hash(s, c.rec.sha256),
+         "core delete: its hash is still trusted");
+   core_trust_set_put(s);
+   remove(core);
+   /* The page's backup list made its folder */
+   strlcpy(core, cores, sizeof(core));
+   strlcat(core, "/core_backups/del_libretro", sizeof(core));
+   path_rmdir(core);
+   strlcpy(core, cores, sizeof(core));
+   strlcat(core, "/core_backups", sizeof(core));
+   path_rmdir(core);
+   path_rmdir(cores);
+}
+
+/* A store that couldn't be read, then one a newer RetroArch saved, then
+ * none at all; the harness's own store is back at the end */
+static void lane_store_trouble(const char *dir)
+{
+   static char data[4096];
+   static char home[512];
+   static char xdg[512];
+   runloop_state_t *runloop_st = runloop_state_get_ptr();
+   core_trust_t *t             = core_trust_new();
+   uint8_t *buf                = NULL;
+   size_t len                  = 0;
+   struct core_check c;
+   char store[512];
+   char cores[512];
+   char core[512];
+   const char *msg;
+   bool changed;
+   FILE *f;
+
+   strlcpy(store, dir, sizeof(store));
+   strlcat(store, "/unreadable_store", sizeof(store));
+   CHECK(path_mkdir(store), "fixture: can't make the unreadable store");
+   task_queue_wait(NULL, NULL);
+   core_trust_runtime_deinit();
+   CHECK(core_trust_runtime_init(store, NULL, NULL)
+         && core_trust_runtime_read_only(),
+         "fixture: the store isn't read-only");
+   push(&seen_a, CORE_WARNING_LOAD, 0x43, CORE_CHECK_UNSIGNED);
+   pump(3);
+   CHECK(   box_says(MSG_CORE_WARNING_STORE_UNREADABLE)
+         && !box_says(MSG_CORE_WARNING_STORE_NEWER),
+         "store trouble: the box doesn't say the list couldn't be read");
+   CHECK(strlen(MENU_STATE_TEXT(menu_state_get_ptr()->driver_data)) < 512,
+         "store trouble: the box text is near the buffer size");
+   answer(MENU_ACTION_CANCEL);
+
+   strlcpy(cores, dir, sizeof(cores));
+   strlcat(cores, "/cores", sizeof(cores));
+   strlcpy(core, cores, sizeof(core));
+   strlcat(core, "/trouble_libretro.so", sizeof(core));
+   memset(data, 0x6b, sizeof(data));
+   CHECK(path_mkdir(cores), "fixture: can't make the cores folder");
+   f = fopen(core, "wb");
+   CHECK(f && fwrite(data, 1, sizeof(data), f) == sizeof(data),
+         "fixture: can't write the core");
+   if (f)
+      fclose(f);
+   if (trust_core(core, &c) == CORE_TRUST_STATE_TRUSTED)
+   {
+      push_core_page(core);
+      msg = trust_row_press(MENU_ACTION_OK, &changed);
+      CHECK(msg && string_is_equal(msg,
+               msg_hash_to_str(MSG_CORE_TRUST_FORGOTTEN_CANT_SAVE)),
+            "store trouble: Untrust didn't say it lasts for this session");
+      CHECK(!hash_trusted(c.rec.sha256),
+            "store trouble: Untrust left its hash trusted");
+   }
+   else
+      fprintf(stderr, "note: lane_store_trouble's Untrust skipped, no "
+            "records in %s\n", dir);
+   remove(core);
+   remove_cores_folder(cores, "trouble_libretro");
+   core_trust_runtime_deinit();
+   path_rmdir(store);
+
+   strlcpy(store, dir, sizeof(store));
+   strlcat(store, "/newer_store", sizeof(store));
+   if (t)
+   {
+      buf = core_trust_serialize(t, &len);
+      core_trust_free(t);
+   }
+   CHECK(buf, "fixture: can't make a store");
+   if (buf)
+   {
+      buf[sizeof(CORE_TRUST_MAGIC) - 2] = '2';
+      f = fopen(store, "wb");
+      CHECK(f && fwrite(buf, 1, len, f) == len,
+            "fixture: can't write the newer store");
+      if (f)
+         fclose(f);
+      free(buf);
+   }
+   CHECK(core_trust_runtime_init(store, NULL, NULL)
+         && core_trust_runtime_newer(),
+         "fixture: the newer store isn't read-only as a newer one's");
+   push(&seen_a, CORE_WARNING_LOAD, 0x44, CORE_CHECK_UNSIGNED);
+   pump(3);
+   CHECK(   box_says(MSG_CORE_WARNING_STORE_NEWER)
+         && !box_says(MSG_CORE_WARNING_STORE_UNREADABLE),
+         "store trouble: the box doesn't say a newer RetroArch saved the list");
+   answer(MENU_ACTION_CANCEL);
+   push_core_settings();
+   msg_queue_clear(&runloop_st->msg_queue);
+   ok_on(row(MENU_ENUM_LABEL_CORE_SIGNATURE_CHECK));
+   msg = msg_queue_pull(&runloop_st->msg_queue);
+   CHECK(msg && string_is_equal(msg, msg_hash_to_str(MSG_CORE_TRUST_NEWER)),
+         "store trouble: Check Core Signatures didn't name the newer one");
+   core_trust_runtime_deinit();
+   remove(store);
+
+   /* No folder for a store: nothing to read */
+   strlcpy(home, getenv("HOME") ? getenv("HOME") : "", sizeof(home));
+   strlcpy(xdg, getenv("XDG_CONFIG_HOME") ? getenv("XDG_CONFIG_HOME") : "",
+         sizeof(xdg));
+   unsetenv("HOME");
+   unsetenv("XDG_CONFIG_HOME");
+   CHECK(core_trust_runtime_init(NULL, NULL, NULL)
+         && core_trust_runtime_read_only()
+         && !core_trust_runtime_newer(),
+         "fixture: the store has a path");
+   if (*home)
+      setenv("HOME", home, 1);
+   if (*xdg)
+      setenv("XDG_CONFIG_HOME", xdg, 1);
+   push(&seen_a, CORE_WARNING_LOAD, 0x45, CORE_CHECK_UNSIGNED);
+   pump(3);
+   CHECK(   shown()
+         && !box_says(MSG_CORE_WARNING_STORE_UNREADABLE)
+         && !box_says(MSG_CORE_WARNING_STORE_NEWER),
+         "store trouble: with no list at all the box speaks of one");
+   answer(MENU_ACTION_CANCEL);
+   core_trust_runtime_deinit();
+
+   strlcpy(store, dir, sizeof(store));
+   strlcat(store, "/core_trust", sizeof(store));
+   CHECK(core_trust_runtime_init(store, NULL, NULL)
+         && !core_trust_runtime_read_only(),
+         "fixture: the harness's store didn't come back");
+}
+
+static int RETRO_CALLCONV refuse_rename(const char *old_path,
+      const char *new_path)
+{
+   (void)old_path;
+   (void)new_path;
+   return -1;
+}
+
+/* Every store save fails at its rename while on */
+static void saves_fail(bool on)
+{
+   static struct retro_vfs_interface iface;
+   struct retro_vfs_interface_info info;
+   iface.rename                    = refuse_rename;
+   info.required_interface_version = FILESTREAM_REQUIRED_VFS_VERSION;
+   info.iface                      = on ? &iface : NULL;
+   filestream_vfs_init(&info);
+}
+
+/* A store whose saves fail: Untrust says it lasts for this session, and
+ * nothing more when its own save fails too; the harness's own store is
+ * back at the end */
+static void lane_saves_fail(const char *dir)
+{
+   static char data[4096];
+   static const uint8_t folder[CORE_SHA256_LEN] = { 9 };
+   runloop_state_t *runloop_st = runloop_state_get_ptr();
+   struct core_check c;
+   struct core_check n;
+   char store[512];
+   char cores[512];
+   char core[512];
+   const char *msg;
+   bool changed;
+   FILE *f;
+
+   strlcpy(store, dir, sizeof(store));
+   strlcat(store, "/saves_fail_store", sizeof(store));
+   task_queue_wait(NULL, NULL);
+   core_trust_runtime_deinit();
+   CHECK(core_trust_runtime_init(store, NULL, NULL),
+         "fixture: can't open a store");
+   strlcpy(cores, dir, sizeof(cores));
+   strlcat(cores, "/cores", sizeof(cores));
+   strlcpy(core, cores, sizeof(core));
+   strlcat(core, "/fails_libretro.so", sizeof(core));
+   memset(data, 0x4f, sizeof(data));
+   CHECK(path_mkdir(cores), "fixture: can't make the cores folder");
+   f = fopen(core, "wb");
+   CHECK(f && fwrite(data, 1, sizeof(data), f) == sizeof(data),
+         "fixture: can't write the core");
+   if (f)
+      fclose(f);
+   if (trust_core(core, &c) == CORE_TRUST_STATE_TRUSTED)
+   {
+      task_queue_wait(NULL, NULL);
+      saves_fail(true);
+      /* A failed save of no change of the user's says nothing */
+      fake_check(&n, "newest_libretro.so", 0x46, CORE_CHECK_OK);
+      memcpy(n.folder, folder, sizeof(folder));
+      n.rec.build_time = 5;
+      n.raise_newest   = true;
+      msg_queue_clear(&runloop_st->msg_queue);
+      CHECK(core_trust_runtime_apply(&n),
+            "fixture: can't raise the newest build");
+      task_queue_wait(NULL, NULL);
+      CHECK(   !core_trust_runtime_can_save()
+            && !msg_queue_pull(&runloop_st->msg_queue),
+            "fixture: the save didn't fail quietly");
+      push_core_page(core);
+      msg = trust_row_press(MENU_ACTION_OK, &changed);
+      CHECK(msg && string_is_equal(msg,
+               msg_hash_to_str(MSG_CORE_TRUST_FORGOTTEN_CANT_SAVE)),
+            "saves fail: Untrust didn't say it lasts for this session");
+      msg_queue_clear(&runloop_st->msg_queue);
+      task_queue_wait(NULL, NULL);
+      CHECK(!msg_queue_pull(&runloop_st->msg_queue),
+            "saves fail: Untrust's own failed save said more");
+      saves_fail(false);
+   }
+   else
+      fprintf(stderr, "note: lane_saves_fail skipped, no records in %s\n",
+            dir);
+   pump(3);
+   remove(core);
+   remove_cores_folder(cores, "fails_libretro");
+   core_trust_runtime_deinit();
+   remove(store);
+
+   strlcpy(store, dir, sizeof(store));
+   strlcat(store, "/core_trust", sizeof(store));
+   CHECK(core_trust_runtime_init(store, NULL, NULL)
+         && !core_trust_runtime_read_only(),
+         "fixture: the harness's store didn't come back");
+}
+
 static void lane_setting(const char *dir)
 {
    char path[512];
+   char core[512];
    struct menu_state *menu_st = menu_state_get_ptr();
    settings_t *settings       = config_get_ptr();
    configuration_set_bool(settings, settings->bools.menu_show_confirm,
@@ -1739,6 +2436,16 @@ static void lane_setting(const char *dir)
    push_core_settings();
    CHECK(row(MENU_ENUM_LABEL_CORE_SIGNATURE_CHECK) == NO_ROW,
          "setting: the row shows with the store inactive");
+
+   strlcpy(path, dir, sizeof(path));
+   strlcat(path, "/cores", sizeof(path));
+   strlcpy(core, path, sizeof(core));
+   strlcat(core, "/trust_libretro.so", sizeof(core));
+   push_core_page(core);
+   CHECK(row_type(MENU_SETTING_ACTION_CORE_LOCK) != NO_ROW
+         && row_type(MENU_SETTING_ACTION_CORE_TRUST) == NO_ROW,
+         "core trust: the row shows with the store inactive");
+   remove_cores_folder(path, "trust_libretro");
 }
 
 int main(int argc, char *argv[])
@@ -1836,8 +2543,13 @@ int main(int argc, char *argv[])
       lane_pointer();
       lane_held();
       lane_replaced();
+      lane_core_trust(dir);
+      lane_core_delete(dir);
+      lane_store_trouble(dir);
+      lane_saves_fail(dir);
       lane_setting(dir);
       synthetic_remove();
+      lane_outside_load(dir);
    }
 
    main_exit(NULL);

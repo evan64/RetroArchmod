@@ -252,7 +252,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    char s_e011fe61[52];
 #endif
-   char s_4e447c6c[29];
    char s_d9a51d02[15];
    char s_12e77e8f[12];
    char s_da068369[12];
@@ -318,7 +317,9 @@ static const struct
    char s_327b2550[11];
    char s_bbb615a1[20];
    char s_213c44cf[15];
+   char s_4f4b0d00[12];
    char s_502f623c[7];
+   char s_223dfc81[7];
    char s_b6cd2ff0[43];
    char s_fe2b08f2[15];
    char s_75661984[21];
@@ -1086,9 +1087,7 @@ static const struct
    char s_dcbf8b04[27];
    char s_dcbffdfe[25];
    char s_7816d5d5[32];
-   char s_2b1f17e8[30];
    char s_36c3acc7[23];
-   char s_b4c3612a[33];
    char s_f638f238[19];
    char s_f3358a59[26];
    char s_b00815b8[11];
@@ -1888,6 +1887,8 @@ static const struct
    char s_61b5b9d0[20];
    char s_313e6a7a[28];
    char s_579c3ea7[25];
+   char s_e29ee11f[13];
+   char s_714b59b6[8];
    char s_ccf131c5[20];
    char s_e5124bba[8];
    char s_875bc33e[11];
@@ -2687,9 +2688,7 @@ static const struct
    char s_c5a76d72[57];
    char s_c5a7e06c[54];
    char s_37d36d03[60];
-   char s_eadbaf16[62];
    char s_54eaf5f5[33];
-   char s_7de5d198[62];
    char s_3b573ee6[29];
    char s_dc1d6cc7[56];
    char s_8b636a26[36];
@@ -4291,7 +4290,6 @@ static const struct
    "V\305\276dy znovu na\304\215\303\255st j\303\241dro p\305\231i spu\305\241t\304\233n\303\255 obs"
    "ahu",
 #endif
-   "\305\230e\305\241en\303\255 odpojen\303\255 Androidu",
    "Ikona aplikace",
    "Prost\305\231edky",
    "Za\305\231\303\255zen\303\255",
@@ -4357,6 +4355,8 @@ static const struct
    "P\305\231ipojeno",
    "URL aktiv Buildbotu",
    "Povolit kameru",
+   "Za\305\231\303\255zen\303\255",
+   "Kamera",
    "Kamera",
    "S t\303\255mto j\303\241drem nelze aktivovat \303\272sp\304\233chy",
    "Adresa pam\304\233ti",
@@ -5134,9 +5134,7 @@ static const struct
    "Zobrazit 'Na\304\215\303\255st j\303\241dro'",
    "Zobrazit 'Na\304\215\303\255st disk'",
    "Zobrazit 'Online aktualiz\303\241tor'",
-   "Zobrazit 'Ukon\304\215it RetroArch'",
    "Zobrazit 'Restartovat'",
-   "Zobrazit 'Restartovat RetroArch'",
    "Zobrazit 'Vypnout'",
    "Zobrazit podnab\303\255dky menu",
    "Zvuky menu",
@@ -5955,6 +5953,8 @@ static const struct
    "MM-DD-RRRR HH:MM:SS",
    "MM-DD-RRRR HH:MM:SS (AM/PM)",
    "MM-DD-RRRR HH:MM (AM/PM)",
+   "Automatick\303\251",
+   "Ru\304\215n\303\255",
    "Styl datumu a \304\215asu",
    "RRRR-MM",
    "RRRR-MM-DD",
@@ -7186,9 +7186,7 @@ static const struct
    "u.",
    "V hlavn\303\255 nab\303\255dce zobrazte mo\305\276nost 'Na\304\215\303\255st disk'.",
    "Zobrazen\303\255 mo\305\276nost 'Online aktualiz\303\241tor' v hlavn\303\255m menu.",
-   "Zobrazen\303\255 mo\305\276nosti 'Ukon\304\215it RetroArch' v hlavn\303\255 nab\303\255dce.",
    "Zobrazit mo\305\276nost 'Restartovat'.",
-   "V hlavn\303\255 nab\303\255dce zobrazte mo\305\276nost 'Restartovat RetroArch'.",
    "Zobrazit mo\305\276nost 'Vypnout'.",
    "Zobrazen\303\255 dal\305\241\303\255ch informac\303\255 o polo\305\276k\303\241ch nab\303\255dky"
    ".",
@@ -8788,7 +8786,7 @@ static const struct
  * compiler that pads this struct fails here instead of
  * misindexing at runtime. */
 typedef char msg_hash_cs_blob_check[
-      (sizeof(msg_hash_cs_blob) == (161281u
+      (sizeof(msg_hash_cs_blob) == (161105u
 #ifdef ANDROID
        + 390u
 #endif
@@ -9387,7 +9385,6 @@ static const msg_hash_id_t msg_hash_cs_ids[] =
 #ifndef HAVE_DYNAMIC
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ALWAYS_RELOAD_CORE_ON_RUN_CONTENT,
 #endif
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ANDROID_INPUT_DISCONNECT_WORKAROUND,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_APPICON_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ASSETS_DIRECTORY,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_AUDIO_DEVICE,
@@ -9453,7 +9450,9 @@ static const msg_hash_id_t msg_hash_cs_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_BT_CONNECTED,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_BUILDBOT_ASSETS_URL,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_ALLOW,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DEVICE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DRIVER,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CANNOT_ACTIVATE_ACHIEVEMENTS_WITH_THIS_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT_ADDRESS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT_ADDRESS_BIT_POSITION,
@@ -10221,9 +10220,7 @@ static const msg_hash_id_t msg_hash_cs_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SOUNDS,
@@ -11022,6 +11019,8 @@ static const msg_hash_id_t msg_hash_cs_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MDYYYY_HMS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MDYYYY_HMS_AMPM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MDYYYY_HM_AMPM,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_AUTOMATIC,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_MANUAL,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_STYLE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YMD,
@@ -11821,9 +11820,7 @@ static const msg_hash_id_t msg_hash_cs_ids[] =
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SOUNDS,

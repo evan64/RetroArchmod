@@ -21,6 +21,7 @@
 #include <math.h>
 
 #include <retro_atomic.h>
+#include <formats/image_yuv_blit.h>
 #include <queues/retro_triple_buffer.h>
 #include <retro_inline.h>
 #include <retro_miscellaneous.h>
@@ -772,6 +773,9 @@ const video_driver_t *video_drivers[] = {
 #endif
 #ifdef _3DS
    &video_ctr,
+#endif
+#ifdef HAVE_DEKO3D
+   &video_deko3d,
 #endif
 #ifdef SWITCH
    &video_switch,
@@ -2172,6 +2176,10 @@ video_driver_t *hw_render_context_driver(
       case RETRO_HW_CONTEXT_RSX:
          return &video_gcm;
 #endif
+#ifdef HAVE_DEKO3D
+      case RETRO_HW_CONTEXT_DEKO3D:
+         return &video_deko3d;
+#endif
       case RETRO_HW_CONTEXT_VULKAN:
 #if defined(HAVE_VULKAN)
          return &video_vulkan;
@@ -2232,6 +2240,10 @@ const char *hw_render_context_name(
    if (type == RETRO_HW_CONTEXT_RSX)
       return "rsx";
 #endif
+#ifdef HAVE_DEKO3D
+   if (type == RETRO_HW_CONTEXT_DEKO3D)
+      return "deko3d";
+#endif
    return "N/A";
 }
 
@@ -2272,6 +2284,10 @@ static enum retro_hw_context_type hw_render_context_type(const char *s)
 #ifdef HAVE_GCM
    if (string_is_equal(s, "rsx"))
       return RETRO_HW_CONTEXT_RSX;
+#endif
+#ifdef HAVE_DEKO3D
+   if (string_is_equal(s, "deko3d"))
+      return RETRO_HW_CONTEXT_DEKO3D;
 #endif
    return RETRO_HW_CONTEXT_NONE;
 }
@@ -4018,6 +4034,10 @@ static uintptr_t video_driver_windows_logo_texture(bool want)
 }
 #endif
 
+#ifdef HAVE_THREADS
+static void video_driver_movie_blocks_free(void);
+#endif
+
 void video_driver_free_internal(void)
 {
    video_driver_state_t *video_st = &video_driver_st;
@@ -4085,6 +4105,9 @@ void video_driver_free_internal(void)
 
    if (video_st->data && vid && vid->free)
       vid->free(video_st->data);
+#ifdef HAVE_THREADS
+   video_driver_movie_blocks_free();
+#endif
    /* The effect programs went with it */
    gfx_display_effects_lost();
    /* No driver follows to take what this one left up */
@@ -6556,13 +6579,16 @@ bool video_driver_find_driver(
 #ifdef HAVE_GCM
             case RETRO_HW_CONTEXT_RSX:
 #endif
+#ifdef HAVE_DEKO3D
+            case RETRO_HW_CONTEXT_DEKO3D:
+#endif
             case RETRO_HW_CONTEXT_OPENGL_CORE:
             case RETRO_HW_CONTEXT_VULKAN:
             case RETRO_HW_CONTEXT_D3D9:
             case RETRO_HW_CONTEXT_D3D10:
             case RETRO_HW_CONTEXT_D3D11:
             case RETRO_HW_CONTEXT_D3D12:
-#if defined(HAVE_VULKAN) || defined(HAVE_D3D9) || defined(HAVE_D3D10) || defined(HAVE_D3D11) || defined(HAVE_D3D12) || defined(HAVE_OPENGL_CORE) || defined(HAVE_GCM)
+#if defined(HAVE_VULKAN) || defined(HAVE_D3D9) || defined(HAVE_D3D10) || defined(HAVE_D3D11) || defined(HAVE_D3D12) || defined(HAVE_OPENGL_CORE) || defined(HAVE_GCM) || defined(HAVE_DEKO3D)
                RARCH_LOG("[Video] Using HW render, %s driver forced.\n",
                      rdr_context_name);
 
@@ -6969,33 +6995,153 @@ bool video_driver_get_device(video_device_info_t *info)
       && poke->get_device(video_st->data, info);
 }
 
+/* Whether a movie frame of @pixfmt can be shown in the core frame's
+ * place now: the driver imports it and nothing needs the frame's
+ * pixels on the CPU. */
+static bool video_driver_movie_ready(uint32_t pixfmt)
+{
+   video_driver_state_t *video_st = &video_driver_st;
+   video_device_info_t info;
+   if (     !video_st->data || !video_st->poke
+         || !video_st->poke->import_movie_frame || video_st->movie_refused)
+      return false;
+#ifdef HAVE_THREADS
+   if (video_driver_thread_wrapper_active() && !video_thread_movie_supported())
+      return false;
+#endif
+#ifdef HAVE_VIDEO_FILTER
+   if (video_st->state_filter)
+      return false;
+#endif
+   return video_driver_get_device(&info) && (info.import_formats & pixfmt)
+      && ((!recording_state_get_ptr()->enable
+            && !recording_state_get_ptr()->streaming_enable)
+         || video_st->record_gpu_buffer);
+}
+
+#ifdef HAVE_THREADS
+/* Frames in memory for the threaded wrapper. The producer lends its
+ * planes only for the call, and the video thread uploads them later,
+ * so they are copied into a block it gives back once its upload has
+ * read them. A block's word: 0 free, 1 lent, 2 lent with the pool gone,
+ * in which case the release frees it. */
+#define VIDEO_MOVIE_BLOCKS 3
+
+typedef struct video_movie_block
+{
+   retro_atomic_int_t state;
+   size_t size;
+} video_movie_block_t;
+
+static video_movie_block_t *video_movie_blocks[VIDEO_MOVIE_BLOCKS];
+
+static void video_driver_movie_block_release(void *owner, uint64_t done,
+      uint64_t done_value)
+{
+   video_movie_block_t *b = (video_movie_block_t*)owner;
+   (void)done;
+   (void)done_value;
+   if (!retro_atomic_cas_int(&b->state, 1, 0))
+      free(b);
+}
+
+/* A free block of at least @size bytes, lent to the caller; NULL while
+ * every block is still being read. Main thread. */
+static video_movie_block_t *video_driver_movie_block(size_t size)
+{
+   unsigned i;
+   for (i = 0; i < VIDEO_MOVIE_BLOCKS; i++)
+   {
+      video_movie_block_t *b = video_movie_blocks[i];
+      if (b && !retro_atomic_cas_int(&b->state, 0, 1))
+         continue;
+      if (!b || b->size < size)
+      {
+         free(b);
+         video_movie_blocks[i] = NULL;
+         if (size > SIZE_MAX - sizeof(*b)
+               || !(b = (video_movie_block_t*)malloc(sizeof(*b) + size)))
+            return NULL;
+         retro_atomic_int_init(&b->state, 1);
+         b->size = size;
+         video_movie_blocks[i] = b;
+      }
+      return b;
+   }
+   return NULL;
+}
+
+/* With the driver gone: a block still lent is the release's to free. */
+static void video_driver_movie_blocks_free(void)
+{
+   unsigned i;
+   for (i = 0; i < VIDEO_MOVIE_BLOCKS; i++)
+   {
+      video_movie_block_t *b = video_movie_blocks[i];
+      video_movie_blocks[i]  = NULL;
+      while (b)
+      {
+         if (retro_atomic_cas_int(&b->state, 0, 2))
+         {
+            free(b);
+            break;
+         }
+         if (retro_atomic_cas_int(&b->state, 1, 2))
+            break;
+      }
+   }
+}
+#endif
+
+bool video_driver_movie_planes(void *user, const video_hw_frame_t *hw)
+{
+   if (!hw)
+      return video_driver_movie_ready(IMAGE_PIXFMT_I420);
+   if (!hw->planes[0] || !hw->planes[1] || !hw->planes[2]
+         || hw->chroma_step != 1)
+      return false;
+#ifdef HAVE_THREADS
+   if (video_driver_thread_wrapper_active())
+   {
+      video_hw_frame_t copy  = *hw;
+      unsigned w             = hw->width, h = hw->height;
+      unsigned cw            = (w + 1) / 2;
+      video_movie_block_t *b = video_driver_movie_block(
+            IMAGE_PIXFMT_FRAME_SIZE(IMAGE_PIXFMT_I420, w, h));
+      uint8_t *planes;
+      bool taken;
+      if (!b)
+         return false;
+      planes = (uint8_t*)(b + 1);
+      image_yuv_420_pack(planes, w, h, hw->planes[0], hw->strides[0],
+            hw->planes[1], hw->planes[2], hw->strides[1], w, h);
+      copy.planes[0]  = planes;
+      copy.planes[1]  = planes + (size_t)w * h;
+      copy.planes[2]  = copy.planes[1] + (size_t)cw * ((h + 1) / 2);
+      copy.strides[0] = w;
+      copy.strides[1] = copy.strides[2] = cw;
+      copy.abandon    = video_driver_movie_block_release;
+      copy.owner      = b;
+      /* Not taken (DROPPED) leaves the block lent to us */
+      if (!(taken = video_driver_movie_refresh(user, &copy)))
+         video_driver_movie_block_release(b, 0, 0);
+      return taken;
+   }
+#endif
+   return video_driver_movie_refresh(user, hw);
+}
+
 bool video_driver_movie_refresh(void *user, const video_hw_frame_t *hw)
 {
    video_driver_state_t *video_st = &video_driver_st;
    const video_poke_interface_t *poke = video_st->poke;
    video_frame_import_t f;
-   video_device_info_t info;
    enum video_texture_update result;
    (void)user;
+   if (!hw)
+      return video_driver_movie_ready(IMAGE_PIXFMT_NV12);
    if (!video_st->data || !poke || !poke->import_movie_frame)
       return false;
-   if (!hw)
-   {
-      if (video_st->movie_refused)
-         return false;
-#ifdef HAVE_THREADS
-      if (video_driver_thread_wrapper_active() && !video_thread_movie_supported())
-         return false;
-#endif
-#ifdef HAVE_VIDEO_FILTER
-      if (video_st->state_filter)
-         return false;
-#endif
-      return video_driver_get_device(&info) && (info.import_formats & IMAGE_PIXFMT_NV12)
-         && ((!recording_state_get_ptr()->enable
-               && !recording_state_get_ptr()->streaming_enable)
-            || video_st->record_gpu_buffer);
-   }
    memset(&f, 0, sizeof(f));
    f.image = hw->image;
    f.plane_views[0] = hw->plane_views[0];
@@ -7014,6 +7160,18 @@ bool video_driver_movie_refresh(void *user, const video_hw_frame_t *hw)
    f.crop_y = hw->crop_y;
    f.abandon = hw->abandon;
    f.owner = hw->owner;
+   if (hw->planes[0])
+   {
+      unsigned i;
+      for (i = 0; i < 3; i++)
+      {
+         f.planar.planes[i]  = hw->planes[i];
+         f.planar.strides[i] = hw->strides[i];
+      }
+      f.planar.chroma_step = hw->chroma_step;
+      f.planar.yuv         = hw->yuv;
+      f.pixfmt             = IMAGE_PIXFMT_I420;
+   }
    result = video_st->movie_refused ? VIDEO_TEXTURE_UPDATE_REFUSED
       : poke->import_movie_frame(video_st->data, &f);
    if (result == VIDEO_TEXTURE_UPDATE_DROPPED)
@@ -8113,7 +8271,11 @@ void video_driver_build_info(video_frame_info_t *video_info)
       video_info->menu.icon_thumbnails                        = settings->uints.menu_icon_thumbnails;
       video_info->menu.xmb_thumbnail_scale_factor             = settings->uints.menu_xmb_thumbnail_scale_factor;
       video_info->menu.xmb_vertical_fade_factor               = settings->uints.menu_xmb_vertical_fade_factor;
-      video_info->menu.timedate_style                         = settings->uints.menu_timedate_style;
+      video_info->menu.timedate_style                         = MENU_TIMEDATE_RESOLVE_STYLE(
+            settings->uints.menu_timedate_mode,
+            settings->uints.menu_timedate_style,
+            settings->bools.menu_timedate_12hour,
+            menu_st->timedate_zone_order);
       video_info->menu.timedate_date_separator                = settings->uints.menu_timedate_date_separator;
       video_info->menu.ticker_type                            = settings->uints.menu_ticker_type;
       video_info->menu.font_color_red                         = settings->uints.menu_font_color_red;
@@ -11354,7 +11516,8 @@ static void video_frame_delay_leftover(video_driver_state_t *video_st,
       uint8_t *skip_update,
       uint8_t *video_frame_delay_effective)
 {
-   retro_time_t time_now         = cpu_features_get_time_usec();
+   /* The iteration's reading, moved on to here by a mark */
+   retro_time_t time_now         = RUNLOOP_NOW(runloop_st, CPU_FEATURES_MARK());
    static retro_time_t time_prev = 0;
    retro_time_t core_run_time    = (runloop_st->core_run_time) ? runloop_st->core_run_time : 500;
    static int16_t frame_time_dev = 0;
@@ -11985,7 +12148,9 @@ VIDEO_NOINLINE static void video_driver_scanline_after_frame(video_driver_state_
       uint16_t frame_time_target,
       uint16_t core_run_time)
 {
-   retro_time_t deadline;
+   retro_time_t deadline    = 0;
+   retro_perf_tick_t mark;
+   retro_perf_tick_t span;
    uint16_t scanline_target = video_st->scanline[SCANLINE_TARGET];
    uint16_t scanline_active = video_st->scanline[SCANLINE_ACTIVE];
    int16_t scanline_last    = -1;
@@ -12012,8 +12177,12 @@ VIDEO_NOINLINE static void video_driver_scanline_after_frame(video_driver_state_
       retro_sleep(sleep);
    }
 
-   /* Lockup prevention */
-   deadline = cpu_features_get_time_usec() + frame_time_target;
+   /* Lockup prevention: a frame's time from here, held against marks;
+    * against the clock while a mark's rate is not known */
+   span = CPU_FEATURES_USEC_TO_MARK(frame_time_target);
+   mark = CPU_FEATURES_MARK();
+   if (!span)
+      deadline = cpu_features_get_time_usec() + frame_time_target;
 
    while (wait)
    {
@@ -12038,7 +12207,9 @@ VIDEO_NOINLINE static void video_driver_scanline_after_frame(video_driver_state_
          break;
       scanline_last = scanline;
 
-      if (cpu_features_get_time_usec() >= deadline)
+      if (span
+            ? (CPU_FEATURES_MARK() - mark >= span)
+            : (cpu_features_get_time_usec() >= deadline))
          break;
    }
 

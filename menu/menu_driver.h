@@ -42,6 +42,7 @@
 #include "../gfx/gfx_animation.h"
 #include "../gfx/gfx_display.h"
 #include "../gfx/gfx_thumbnail.h"
+#include "../camera/camera_driver.h"
 #include "../gfx/font_driver.h"
 #include "../performance_counters.h"
 
@@ -91,7 +92,8 @@ enum menu_frame_work
    MENU_FRAME_WORK_PLAYLIST = (1 << 0),
    /* presses to look for: two connected controllers show one name,
     * or did at the last frame */
-   MENU_FRAME_WORK_PAD_FIND = (1 << 1)
+   MENU_FRAME_WORK_PAD_FIND = (1 << 1),
+   MENU_FRAME_WORK_PYROWAVE = (1 << 2)
 };
 
 #define MENU_PAD_MARKED(menu_st, slot) ((slot) < MAX_INPUT_DEVICES \
@@ -199,6 +201,7 @@ enum menu_settings_type
    MENU_SETTING_ACTION_CORE_LOCK,
    MENU_SETTING_ACTION_CORE_SET_STANDALONE_EXEMPT,
    MENU_SETTING_ACTION_CORE_SIGNATURE_CHECK,
+   MENU_SETTING_ACTION_CORE_TRUST,
    MENU_SETTING_ACTION_CORE_DELETE,
    MENU_SETTING_ACTION_FAVORITES_DIR, /* "Start Directory" */
    MENU_SETTING_STRING_OPTIONS,
@@ -669,6 +672,9 @@ struct menu_state
    bool pads_listed;
    /* enum menu_frame_work: a frame with none tests this alone */
    uint8_t frame_work;
+   /* enum menu_timedate_date_order of the host's zone, taken on the main
+    * thread when the menu opens and when Lakka's zone changes */
+   uint8_t timedate_zone_order;
 
 };
 
@@ -792,7 +798,12 @@ void menu_driver_context_rebuild(void);
 
 retro_time_t menu_driver_get_current_time(void);
 
-size_t menu_display_timedate(gfx_display_ctx_datetime_t *datetime, char *s, size_t len);
+/* The clock in @style with @separator, rebuilt once a second or when
+ * either changes. Returns the string, valid until the next call; its
+ * length goes in @len and in @gen a number, never zero, that moves only
+ * when the text does, either one when not NULL. Drawing thread only. */
+const char *menu_display_timedate(unsigned style, unsigned separator,
+      size_t *len, unsigned *gen);
 
 size_t menu_display_powerstate(gfx_display_ctx_powerstate_t *powerstate, char *s, size_t len);
 
@@ -896,6 +907,8 @@ void menu_driver_toggle(
 
 /* Queue a fullscreen file-browser launch; NULL cancels it. */
 bool menu_driver_media_open(const char *path);
+/* Whether menu_driver_media_open() would take path; queues nothing. */
+bool menu_driver_media_can_open(const char *path);
 /* Startup presentation is released only by the activated fullscreen view. */
 int menu_driver_media_startup_token(void);
 void menu_driver_media_startup_ready(int token);
@@ -1018,6 +1031,8 @@ typedef struct menu_dialog_label_widths
  * that changed since c was filled */
 const int *menu_dialog_label_widths(menu_dialog_label_widths_t *c,
       const menu_dialog_buttons_t *b, font_data_t *font, float size);
+/* False when the driver shows no screens (null) */
+bool menu_core_warning_can_open(void);
 #ifdef HAVE_CORE_SIGNATURES
 /* Raises the Security Warning's box for the request pending, or takes
  * it down when none is; true on the frame it went up */
@@ -1036,6 +1051,27 @@ extern menu_ctx_driver_t menu_ctx_rgui;
 extern menu_ctx_driver_t menu_ctx_pix16;
 extern menu_ctx_driver_t menu_ctx_mui;
 extern menu_ctx_driver_t menu_ctx_xmb;
+
+/* The camera preview. A menu driver shows it in a thumbnail of its own
+ * while menu_camera_preview_selected(), calling
+ * menu_camera_preview_frame() with that thumbnail every frame it is
+ * shown, and resets the thumbnail when it stops showing it, which
+ * closes the camera. The state says what, if anything, the thumbnail
+ * is receiving. */
+bool menu_camera_preview_selected(void);
+enum camera_preview_state menu_camera_preview_frame(gfx_thumbnail_t *thumbnail);
+void menu_camera_preview_stop(void);
+/* For a driver with a sink of its own (camera_driver_preview_open):
+ * polls the preview and tells the user once of a state that shows no
+ * picture. */
+enum camera_preview_state menu_camera_preview_poll(void);
+/* The two together, for a driver drawing with gfx_display: _update
+ * each frame, true while the preview is to be drawn (and the
+ * thumbnail reset once it is not); _draw a black box of @dims at
+ * @x, @y with the picture fitted in it. */
+bool menu_camera_preview_update(gfx_thumbnail_t *thumbnail);
+void menu_camera_preview_draw(gfx_thumbnail_t *thumbnail, void *userdata,
+      unsigned video_dims, float x, float y, unsigned dims);
 
 RETRO_END_DECLS
 

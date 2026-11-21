@@ -359,6 +359,7 @@ typedef struct settings
       unsigned accessibility_narrator_engine;
 
       unsigned menu_timedate_style;
+      unsigned menu_timedate_mode;
       unsigned menu_frame_rate;
       unsigned menu_timedate_date_separator;
       unsigned gfx_thumbnails;
@@ -399,6 +400,7 @@ typedef struct settings
       unsigned menu_rgui_particle_effect;
       unsigned menu_pix16_button_style;
       unsigned menu_pix16_transition;
+      unsigned menu_pix16_background;
       unsigned menu_pix16_palette;
       unsigned menu_ticker_type;
       unsigned menu_scroll_delay;
@@ -764,6 +766,10 @@ typedef struct settings
       bool video_disable_composition;
       bool video_post_filter_record;
       bool video_gpu_record;
+#ifdef HAVE_PYROWAVE
+      bool pyrowave_discovery_enable;
+      bool pyrowave_full_output;
+#endif
       bool video_record_allow_frame_drop;
       bool video_record_game_only;
       bool video_record_hw_encoder;
@@ -839,8 +845,12 @@ typedef struct settings
       bool input_trigger_full_range;
       bool input_autodetect_enable;
       bool input_sensors_enable;
+#ifdef ANDROID
       bool input_android_system_keyboard;
+#endif
+#ifdef HAVE_SDL3
       bool input_sdl3_system_keyboard;
+#endif
       bool input_overlay_enable;
       bool input_overlay_enable_autopreferred;
       bool input_overlay_behind_menu;
@@ -919,6 +929,7 @@ typedef struct settings
       bool menu_savestate_resume;
       bool menu_insert_disk_resume;
       bool menu_timedate_enable;
+      bool menu_timedate_12hour;
       bool menu_battery_level_enable;
       bool menu_core_enable;
       bool menu_show_sublabels;
@@ -973,10 +984,10 @@ typedef struct settings
       bool menu_rgui_transparency;
       bool menu_rgui_shadows;
       bool menu_pix16_widescreen;
-      bool menu_pix16_classic_theme;
       bool menu_pix16_boot_screen;
       bool menu_pix16_start_screen;
       bool menu_pix16_screen_asked;
+      bool menu_pix16_reduced_motion;
       bool menu_rgui_inline_thumbnails;
       bool menu_rgui_swap_thumbnails;
       bool menu_rgui_thumbnail_dither;
@@ -1482,6 +1493,9 @@ typedef struct settings
       char cloud_sync_nfs_subdir[PATH_MAX_LENGTH];
 #endif
 #endif
+#ifdef HAVE_PYROWAVE
+      char pyrowave_device_name[64];
+#endif
 } arrays;
 
    struct
@@ -1526,6 +1540,9 @@ typedef struct settings
       char directory_runtime_log[DIR_MAX_LENGTH];
       char directory_core_assets[DIR_MAX_LENGTH];
       char directory_assets[DIR_MAX_LENGTH];
+#ifdef HAVE_PYROWAVE
+      char directory_pyrowave_shaders[DIR_MAX_LENGTH];
+#endif
       char directory_dynamic_wallpapers[DIR_MAX_LENGTH];
       char directory_thumbnails[DIR_MAX_LENGTH];
       char directory_menu_config[DIR_MAX_LENGTH];

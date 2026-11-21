@@ -200,6 +200,7 @@ bool	menu_texture_mipmapping	1	1
 bool	menu_pause_libretro	1	1
 bool	menu_savestate_resume	1	1
 bool	menu_insert_disk_resume	1	1
+bool	menu_timedate_12hour	1	0
 bool	menu_mouse_enable	1	0
 bool	menu_pointer_enable	1	1
 bool	netplay_nat_traversal	1	1
@@ -274,7 +275,7 @@ bool	video_window_show_decorations	1	1
 bool	video_force_srgb_disable	1	0
 bool	video_shader_watch_files	1	0
 bool	video_shader_remember_last_dir	1	1
-bool	android_input_disconnect_workaround	1	0
+bool	android_input_disconnect_workaround	1	1
 bool	video_frame_time_sample_from_display	1	0
 bool	video_frame_time_sample_gated	1	0
 bool	video_adaptive_vsync	1	0
@@ -422,7 +423,6 @@ bool	keyboard_gamepad_enable	1	1
 bool	menu_swap_ok_cancel_buttons	1	1
 bool	menu_swap_scroll_buttons	1	0
 bool	input_android_system_keyboard	1	1
-bool	input_sdl3_system_keyboard	1	0
 bool	stdin_cmd_enable	1	0
 bool	netplay_request_device_p1	1	0
 bool	netplay_request_device_p2	1	0
@@ -495,8 +495,6 @@ uint	input_bind_hold	1	1
 uint	netplay_chat_color_name	1	0x008000
 uint	netplay_chat_color_msg	1	0xFFFFFF
 uint	playlist_entry_remove_enable	1	PLAYLIST_ENTRY_REMOVE_ENABLE_ALL
-uint	menu_timedate_style	1	MENU_TIMEDATE_STYLE_YMD_HM
-uint	menu_timedate_date_separator	1	MENU_TIMEDATE_DATE_SEPARATOR_HYPHEN
 uint	rgui_particle_effect	1	RGUI_PARTICLE_EFFECT_NONE
 uint	cloud_sync_sync_mode	1	CLOUD_SYNC_MODE_AUTOMATIC
 uint	fps_update_interval	1	256
@@ -577,6 +575,9 @@ uint	playlist_show_inline_core_name	1	PLAYLIST_INLINE_CORE_DISPLAY_HIST_FAV
 uint	cheevos_visibility_summary	1	1
 uint	quit_on_close_content	1	QUIT_ON_CLOSE_CONTENT_DISABLED
 uint	menu_screensaver_timeout	1	0
+uint	menu_timedate_mode	1	MENU_TIMEDATE_MODE_MANUAL
+uint	menu_timedate_style	1	MENU_TIMEDATE_STYLE_YMD_HM
+uint	menu_timedate_date_separator	1	MENU_TIMEDATE_DATE_SEPARATOR_HYPHEN
 uint	menu_remember_selection	1	MENU_REMEMBER_SELECTION_ALWAYS
 uint	menu_startup_page	1	MENU_STARTUP_PAGE_MAIN_MENU
 uint	netplay_share_digital	1	RARCH_NETPLAY_SHARE_DIGITAL_NO_SHARING
@@ -945,6 +946,7 @@ bool	menu_texture_mipmapping	1	1
 bool	menu_pause_libretro	1	1
 bool	menu_savestate_resume	1	1
 bool	menu_insert_disk_resume	1	1
+bool	menu_timedate_12hour	1	0
 bool	menu_mouse_enable	1	1
 bool	menu_pointer_enable	1	0
 bool	netplay_nat_traversal	1	1
@@ -1164,8 +1166,6 @@ bool	input_overlay_show_mouse_cursor	1	0
 bool	keyboard_gamepad_enable	1	1
 bool	menu_swap_ok_cancel_buttons	1	1
 bool	menu_swap_scroll_buttons	1	0
-bool	input_android_system_keyboard	1	1
-bool	input_sdl3_system_keyboard	1	0
 bool	stdin_cmd_enable	1	0
 bool	netplay_request_device_p1	1	0
 bool	netplay_request_device_p2	1	0
@@ -1234,8 +1234,6 @@ uint	input_bind_hold	1	0
 uint	netplay_chat_color_name	1	0x008000
 uint	netplay_chat_color_msg	1	0xFFFFFF
 uint	playlist_entry_remove_enable	1	PLAYLIST_ENTRY_REMOVE_ENABLE_ALL
-uint	menu_timedate_style	1	MENU_TIMEDATE_STYLE_YMD_HM
-uint	menu_timedate_date_separator	1	MENU_TIMEDATE_DATE_SEPARATOR_HYPHEN
 uint	rgui_particle_effect	1	RGUI_PARTICLE_EFFECT_NONE
 uint	cloud_sync_sync_mode	1	CLOUD_SYNC_MODE_AUTOMATIC
 uint	fps_update_interval	1	256
@@ -1316,6 +1314,9 @@ uint	playlist_show_inline_core_name	1	PLAYLIST_INLINE_CORE_DISPLAY_HIST_FAV
 uint	cheevos_visibility_summary	1	1
 uint	quit_on_close_content	1	QUIT_ON_CLOSE_CONTENT_DISABLED
 uint	menu_screensaver_timeout	1	0
+uint	menu_timedate_mode	1	MENU_TIMEDATE_MODE_MANUAL
+uint	menu_timedate_style	1	MENU_TIMEDATE_STYLE_YMD_HM
+uint	menu_timedate_date_separator	1	MENU_TIMEDATE_DATE_SEPARATOR_HYPHEN
 uint	menu_remember_selection	1	MENU_REMEMBER_SELECTION_ALWAYS
 uint	menu_startup_page	1	MENU_STARTUP_PAGE_MAIN_MENU
 uint	netplay_share_digital	1	RARCH_NETPLAY_SHARE_DIGITAL_NO_SHARING
@@ -1686,6 +1687,7 @@ bool	menu_texture_mipmapping	1	1
 bool	menu_pause_libretro	1	1
 bool	menu_savestate_resume	1	1
 bool	menu_insert_disk_resume	1	1
+bool	menu_timedate_12hour	1	0
 bool	menu_mouse_enable	1	1
 bool	menu_pointer_enable	1	0
 bool	netplay_nat_traversal	1	1
@@ -1907,8 +1909,6 @@ bool	input_overlay_show_mouse_cursor	1	0
 bool	keyboard_gamepad_enable	1	1
 bool	menu_swap_ok_cancel_buttons	1	1
 bool	menu_swap_scroll_buttons	1	0
-bool	input_android_system_keyboard	1	1
-bool	input_sdl3_system_keyboard	1	0
 bool	stdin_cmd_enable	1	0
 bool	netplay_request_device_p1	1	0
 bool	netplay_request_device_p2	1	0
@@ -1982,8 +1982,6 @@ uint	input_bind_hold	1	0
 uint	netplay_chat_color_name	1	0x008000
 uint	netplay_chat_color_msg	1	0xFFFFFF
 uint	playlist_entry_remove_enable	1	PLAYLIST_ENTRY_REMOVE_ENABLE_ALL
-uint	menu_timedate_style	1	MENU_TIMEDATE_STYLE_YMD_HM
-uint	menu_timedate_date_separator	1	MENU_TIMEDATE_DATE_SEPARATOR_HYPHEN
 uint	rgui_particle_effect	1	RGUI_PARTICLE_EFFECT_NONE
 uint	cloud_sync_sync_mode	1	CLOUD_SYNC_MODE_AUTOMATIC
 uint	fps_update_interval	1	256
@@ -2074,6 +2072,9 @@ uint	playlist_show_inline_core_name	1	PLAYLIST_INLINE_CORE_DISPLAY_HIST_FAV
 uint	cheevos_visibility_summary	1	1
 uint	quit_on_close_content	1	QUIT_ON_CLOSE_CONTENT_DISABLED
 uint	menu_screensaver_timeout	1	0
+uint	menu_timedate_mode	1	MENU_TIMEDATE_MODE_MANUAL
+uint	menu_timedate_style	1	MENU_TIMEDATE_STYLE_YMD_HM
+uint	menu_timedate_date_separator	1	MENU_TIMEDATE_DATE_SEPARATOR_HYPHEN
 uint	menu_remember_selection	1	MENU_REMEMBER_SELECTION_ALWAYS
 uint	menu_startup_page	1	MENU_STARTUP_PAGE_MAIN_MENU
 uint	netplay_share_digital	1	RARCH_NETPLAY_SHARE_DIGITAL_NO_SHARING

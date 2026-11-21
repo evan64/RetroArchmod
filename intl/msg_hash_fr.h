@@ -265,7 +265,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    char s_e011fe61[57];
 #endif
-   char s_4e447c6c[41];
    char s_d9a51d02[18];
    char s_12e77e8f[12];
    char s_98760b94[40];
@@ -358,7 +357,9 @@ static const struct
    char s_314539a4[23];
    char s_8fc168f0[7];
    char s_213c44cf[27];
+   char s_4f4b0d00[16];
    char s_502f623c[16];
+   char s_223dfc81[16];
    char s_b6cd2ff0[56];
    char s_fe2b08f2[17];
    char s_75661984[29];
@@ -1311,9 +1312,7 @@ static const struct
    char s_dcbf8b04[28];
    char s_dcbffdfe[29];
    char s_7816d5d5[33];
-   char s_2b1f17e8[29];
    char s_36c3acc7[23];
-   char s_b4c3612a[33];
    char s_f638f238[21];
    char s_f3358a59[44];
    char s_f8098721[83];
@@ -2290,6 +2289,8 @@ static const struct
    char s_579c3ea7[25];
    char s_cc7bf1b9[12];
    char s_b300fc03[20];
+   char s_e29ee11f[12];
+   char s_714b59b6[7];
    char s_ccf131c5[38];
    char s_e5124bba[8];
    char s_875bc33e[11];
@@ -3364,9 +3365,7 @@ static const struct
    char s_c5a76d72[61];
    char s_c5a7e06c[62];
    char s_37d36d03[66];
-   char s_eadbaf16[62];
    char s_54eaf5f5[33];
-   char s_7de5d198[66];
    char s_3b573ee6[31];
    char s_dc1d6cc7[72];
    char s_28543dcf[95];
@@ -5221,7 +5220,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    "Toujours recharger le c\305\223ur lors du lancement de contenu",
 #endif
-   "Solution \303\240 la d\303\251connexion pour Android",
    "Ic\303\264ne de l\342\200\231app",
    "Ressources ",
    "Ouvrir le panneau de configuration ASIO",
@@ -5315,6 +5313,8 @@ static const struct
    "Identifiant du Bundle ",
    "Cache ",
    "Autoriser l'appareil photo",
+   "P\303\251riph\303\251rique ",
+   "Appareil photo ",
    "Appareil photo ",
    "Les succ\303\250s ne peuvent pas \303\252tre activ\303\251s avec ce c\305\223ur",
    "Adresse m\303\251moire",
@@ -6280,9 +6280,7 @@ static const struct
    "Afficher 'Charger un c\305\223ur'",
    "Afficher 'Charger un disque'",
    "Afficher 'Mise \303\240 jour en ligne'",
-   "Afficher 'Quitter RetroArch'",
    "Afficher 'Red\303\251marrer'",
-   "Afficher 'Red\303\251marrer RetroArch'",
    "Afficher '\303\211teindre'",
    "Afficher les sous-descriptions dans le menu",
    "Afficher les sous-descriptions dans le menu uniquement pour la s\303\251lection actuelle",
@@ -7272,6 +7270,8 @@ static const struct
    "MM-JJ-AAAA HH:MM (AM/PM)",
    "MM-JJ HH:MM",
    "MM-JJ HH:MM (AM/PM)",
+   "Automatique",
+   "Manuel",
    "Style d'affichage de la date/l'heure ",
    "AAAA-MM",
    "AAAA-MM-JJ",
@@ -8932,9 +8932,7 @@ static const struct
    "Afficher l'option 'Charger un c\305\223ur' dans le menu principal.",
    "Afficher l'option 'Charger un disque' dans le menu principal.",
    "Afficher l'option 'Mise \303\240 jour en ligne' dans le menu principal.",
-   "Afficher l'option 'Quitter RetroArch' dans le menu principal.",
    "Afficher l'option 'Red\303\251marrer'.",
-   "Afficher l'option 'Red\303\251marrer RetroArch' dans le menu principal.",
    "Afficher l'option '\303\211teindre'.",
    "Afficher des informations suppl\303\251mentaires pour les \303\251l\303\251ments du menu.",
    "N'afficher une sous-description que pour l'\303\251l\303\251ment de menu actuellement mis en sur"
@@ -10991,7 +10989,7 @@ static const struct
  * compiler that pads this struct fails here instead of
  * misindexing at runtime. */
 typedef char msg_hash_fr_blob_check[
-      (sizeof(msg_hash_fr_blob) == (256938u
+      (sizeof(msg_hash_fr_blob) == (256758u
 #ifdef ANDROID
        + 373u
 #endif
@@ -11801,7 +11799,6 @@ static const msg_hash_id_t msg_hash_fr_ids[] =
 #ifndef HAVE_DYNAMIC
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ALWAYS_RELOAD_CORE_ON_RUN_CONTENT,
 #endif
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ANDROID_INPUT_DISCONNECT_WORKAROUND,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_APPICON_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ASSETS_DIRECTORY,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_AUDIO_ASIO_CONTROL_PANEL,
@@ -11894,7 +11891,9 @@ static const msg_hash_id_t msg_hash_fr_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_BUNDLE_IDENTIFIER,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CACHE_DIRECTORY,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_ALLOW,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DEVICE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DRIVER,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CANNOT_ACTIVATE_ACHIEVEMENTS_WITH_THIS_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT_ADDRESS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT_ADDRESS_BIT_POSITION,
@@ -12847,9 +12846,7 @@ static const msg_hash_id_t msg_hash_fr_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SUBLABELS_CURRENT_SELECTION_ONLY,
@@ -13825,6 +13822,8 @@ static const msg_hash_id_t msg_hash_fr_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MDYYYY_HM_AMPM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MD_HM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MD_HM_AMPM,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_AUTOMATIC,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_MANUAL,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_STYLE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YMD,
@@ -14886,9 +14885,7 @@ static const msg_hash_id_t msg_hash_fr_ids[] =
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SUBLABELS_CURRENT_SELECTION_ONLY,

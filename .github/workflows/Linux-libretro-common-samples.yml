@@ -114,6 +114,9 @@ jobs:
           # self-contained test and exits 0 on success / non-zero on
           # failure.  These are built AND executed.
           declare -a RUN_TARGETS=(
+            rpyrowave_test
+            rpyrowave_stream_test
+            rpyrowave_stream_tcp_test
             rwma_test
             audio_transfer_wma_test
             flv_mux_test
@@ -182,6 +185,8 @@ jobs:
             path_parent_dir_test
             # path_remove_tree and path_copy_tree on a real tree, links
             path_tree_test
+            # strftime_am_pm: both designators, short buffers, repeat calls
+            strftime_am_pm_test
             rpng
             # a PNG a row at a time, as stored, from input in pieces
             rpng_rows_test
@@ -357,6 +362,7 @@ jobs:
             http_parse_test
             # UPnP gateway client: parsers, and SOAP against a fake gateway.
             net_upnp_test
+            net_mdns_test
             # net_http: a 3xx handed back unfollowed, a DELETE body's
             # Content-Length, the caller's Accept-Encoding/User-Agent.
             net_http_options_test
@@ -493,6 +499,10 @@ jobs:
             # localtime() from four threads, before rtime_init() as
             # well as after: each must get its own fields back.
             rtime_localtime_test
+            # The calendar clock, UTC and standard offsets and the zone
+            # name against fixed zones; the Android build reads the property.
+            rtime_calendar_test
+            rtime_calendar_android_test
             # Runs its natural tier only here; procbarrier-tiers.yml
             # forces every tier on Linux, Windows and macOS runners.
             retro_procbarrier_test
@@ -2131,6 +2141,20 @@ jobs:
           # ps2sdk's does, is not a failure on the descriptor path.
           timeout 120 wine ./vfs_close_result_test.exe
           make clean MMAP=0
+
+      - name: Build and run the calendar time reads under Wine
+        shell: bash
+        working-directory: libretro-common/samples/time/rtime_calendar_test
+        env:
+          WINEDEBUG: -all
+        run: |
+          set -eu
+          set -o pipefail
+          . "$GITHUB_WORKSPACE/.github/workflows/scripts/wine-server.sh"
+          make clean
+          make CC=x86_64-w64-mingw32-gcc EXE=.exe rtime_calendar_test.exe
+          timeout 120 wine ./rtime_calendar_test.exe
+          make clean
 
       - name: Build and run native DVD packets under Wine
         shell: bash

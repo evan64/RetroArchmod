@@ -1084,6 +1084,10 @@ MSG_HASH(
    "deferred_midi_settings_list"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_DEFERRED_CAMERA_SETTINGS_LIST,
+   "deferred_camera_settings_list"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_DEFERRED_RDB_ENTRY_DETAIL,
    "deferred_rdb_entry_detail"
    )
@@ -3141,6 +3145,10 @@ MSG_HASH(
    "core_signature_check"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_CORE_TRUST,
+   "core_trust"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_CORE_SET_STANDALONE_EXEMPT,
    "core_set_standalone_exempt"
    )
@@ -3932,3 +3940,24 @@ MSG_HASH(
    "nfs_client_browse"
    )
 #endif
+
+MSG_HASH(
+   MENU_ENUM_LABEL_PYROWAVE_DEVICES,
+   "pyrowave_devices"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_PYROWAVE_SEND,
+   "pyrowave_send"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_PYROWAVE_ACCEPT,
+   "pyrowave_accept"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_PYROWAVE_DECLINE,
+   "pyrowave_decline"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_PYROWAVE_STOP,
+   "pyrowave_stop"
+   )

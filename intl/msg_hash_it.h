@@ -257,7 +257,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    char s_e011fe61[52];
 #endif
-   char s_4e447c6c[31];
    char s_d9a51d02[10];
    char s_12e77e8f[14];
    char s_da068369[18];
@@ -328,7 +327,9 @@ static const struct
    char s_bbb615a1[25];
    char s_314539a4[22];
    char s_213c44cf[20];
+   char s_4f4b0d00[18];
    char s_502f623c[11];
+   char s_223dfc81[11];
    char s_b6cd2ff0[58];
    char s_40e7aacd[8];
    char s_fe2b08f2[18];
@@ -1134,9 +1135,7 @@ static const struct
    char s_dcbf8b04[23];
    char s_dcbffdfe[22];
    char s_7816d5d5[30];
-   char s_2b1f17e8[27];
    char s_36c3acc7[15];
-   char s_b4c3612a[27];
    char s_f638f238[21];
    char s_f3358a59[32];
    char s_0d7d9688[26];
@@ -2019,6 +2018,8 @@ static const struct
    char s_579c3ea7[25];
    char s_cc7bf1b9[12];
    char s_b300fc03[20];
+   char s_e29ee11f[11];
+   char s_714b59b6[8];
    char s_ccf131c5[20];
    char s_e5124bba[8];
    char s_875bc33e[11];
@@ -2899,9 +2900,7 @@ static const struct
    char s_c5a76d72[54];
    char s_c5a7e06c[53];
    char s_37d36d03[61];
-   char s_eadbaf16[58];
    char s_54eaf5f5[28];
-   char s_7de5d198[58];
    char s_3b573ee6[32];
    char s_dc1d6cc7[52];
    char s_aebcb136[124];
@@ -4497,7 +4496,6 @@ static const struct
 #ifndef HAVE_DYNAMIC
    "Ricarica sempre il Core in esecuzione dei contenuti",
 #endif
-   "Disconnetti Android workaround",
    "Icona App",
    "Risorse/Asset",
    "Dispositivo audio",
@@ -4568,6 +4566,8 @@ static const struct
    "URL degli asset Buildbot",
    "Identificatore bundle",
    "Consenti Fotocamera",
+   "Dispositivo audio",
+   "Fotocamera",
    "Fotocamera",
    "Gli obiettivi non possono essere attivati con questo core",
    "Trucchi",
@@ -5374,9 +5374,7 @@ static const struct
    "Mostra 'Carica Nucleo'",
    "Mostra 'Carica Disco'",
    "Mostra 'Aggiornamenti online'",
-   "Mostra 'Esci da RetroArch'",
    "Show 'Riavvio'",
-   "Mostra 'Riavvia RetroArch'",
    "Mostra 'Spegnimento'",
    "Mostra Sotto-Etichette Del Menu",
    "Playlist con un solo clic",
@@ -6265,6 +6263,8 @@ static const struct
    "MM-GG-AAAA HH:MM (AM/PM)",
    "MM-GG HH:MM",
    "MM-GG HH:MM (AM/PM)",
+   "Automatico",
+   "Manuale",
    "Stile di data e ora",
    "AAAA-MM",
    "AAAA-MM-GG",
@@ -7354,9 +7354,7 @@ static const struct
    "Mostra l'opzione 'Carica nucleo' nel menu principale.",
    "Mostra l'opzione 'Carica disco' nel menu principale.",
    "Mostra l'opzione 'Aggiornamenti online' nel menu principale.",
-   "Mostra l'opzione 'Esci da RetroArch' nel menu principale.",
    "Mostra l'opzione 'Riavvio'.",
-   "Mostra l'opzione 'Riavvia RetroArch' nel menu principale.",
    "Mostra l'opzione 'Spegnimento'.",
    "Mostra informazioni aggiuntive per le voci di menu.",
    "Salta il menu 'Avvia' quando si aprono le voci della playlist. Premi D-Pad tenendo premuto OK pe"
@@ -8817,7 +8815,7 @@ static const struct
  * compiler that pads this struct fails here instead of
  * misindexing at runtime. */
 typedef char msg_hash_it_blob_check[
-      (sizeof(msg_hash_it_blob) == (182039u
+      (sizeof(msg_hash_it_blob) == (181886u
 #ifdef ANDROID
        + 376u
 #endif
@@ -9501,7 +9499,6 @@ static const msg_hash_id_t msg_hash_it_ids[] =
 #ifndef HAVE_DYNAMIC
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ALWAYS_RELOAD_CORE_ON_RUN_CONTENT,
 #endif
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ANDROID_INPUT_DISCONNECT_WORKAROUND,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_APPICON_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_ASSETS_DIRECTORY,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_AUDIO_DEVICE,
@@ -9572,7 +9569,9 @@ static const msg_hash_id_t msg_hash_it_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_BUILDBOT_ASSETS_URL,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_BUNDLE_IDENTIFIER,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_ALLOW,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DEVICE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_DRIVER,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CAMERA_SETTINGS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CANNOT_ACTIVATE_ACHIEVEMENTS_WITH_THIS_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_CHEAT_ADDRESS,
@@ -10378,9 +10377,7 @@ static const msg_hash_id_t msg_hash_it_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_MENU_SINGLECLICK_PLAYLISTS,
@@ -11262,6 +11259,8 @@ static const msg_hash_id_t msg_hash_it_ids[] =
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MDYYYY_HM_AMPM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MD_HM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MD_HM_AMPM,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_AUTOMATIC,
+   (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_MODE_MANUAL,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_STYLE,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YM,
    (msg_hash_id_t)MENU_ENUM_LABEL_VALUE_TIMEDATE_YMD,
@@ -12142,9 +12141,7 @@ static const msg_hash_id_t msg_hash_it_ids[] =
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_CORE,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_LOAD_DISC,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_ONLINE_UPDATER,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_QUIT_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_REBOOT,
-   (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_RESTART_RETROARCH,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SHUTDOWN,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SHOW_SUBLABELS,
    (msg_hash_id_t)MENU_ENUM_SUBLABEL_MENU_SINGLECLICK_PLAYLISTS,

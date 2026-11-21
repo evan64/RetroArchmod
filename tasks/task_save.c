@@ -50,6 +50,9 @@
 #include "../runloop.h"
 #include "../verbosity.h"
 #include "tasks_internal.h"
+#ifdef HAVE_RUNAHEAD
+#include "../runahead.h"
+#endif
 
 #ifdef __EMSCRIPTEN__
 /* Use huge chunks since each read/write is a possible suspend to
@@ -858,6 +861,27 @@ bool content_serialize_state_rewind(void* buffer, size_t buffer_size)
       return false;
    }
    return content_write_serialized_state(buffer, &size, true);
+}
+
+const void *content_rewind_state_core(const void *state, size_t len,
+      size_t *core_size)
+{
+   /* A rewind state carries no replay block: the identifier, then the
+    * core's block */
+   const unsigned char *p = (const unsigned char*)state;
+   size_t block_size;
+   if (     !p || len < 16
+         || memcmp(p, "RASTATE", 7)
+         || memcmp(p + 8, RASTATE_MEM_BLOCK, 4))
+      return NULL;
+   block_size = (size_t)(  ((uint32_t)p[15] << 24)
+                         | ((uint32_t)p[14] << 16)
+                         | ((uint32_t)p[13] <<  8)
+                         |  (uint32_t)p[12]);
+   if (block_size > len - 16)
+      return NULL;
+   *core_size = block_size;
+   return p + 16;
 }
 
 static void *content_get_serialized_data(size_t *serial_size)
@@ -2234,7 +2258,13 @@ bool content_save_state_notify(const char *path, bool save_to_disk,
       return true;
    }
 
-   if (!save_state_in_background)
+   /* Managed serialization uses the core thread's context and lifetime.
+    * Capture ordinary slot states there too; only file I/O is deferred. */
+   if (!save_state_in_background
+#ifdef HAVE_RUNAHEAD
+         || serialization_lifetime_active()
+#endif
+      )
    {
       if (!(data = content_get_serialized_data(&_len)))
       {
